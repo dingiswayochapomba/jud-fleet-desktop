@@ -1,48 +1,56 @@
-<!-- Copilot / AI agent instructions for Fleet Management System -->
+<!-- Copilot / AI agent instructions for Fleet Management System Desktop -->
 
-# 🚗 Fleet Management System — AI Agent Instructions
+# 🚗 Fleet Management System — AI Agent Instructions (Desktop)
 
 **Last Updated:** January 9, 2026
 
 ## Quick Orientation
 
-This is a **monorepo** managing a fleet for the Malawi Judiciary with three independent services:
-- **Backend:** Node.js/Express REST API (port 3000, PostgreSQL, JWT auth)
-- **Web:** Next.js dashboard for admins/managers (port 3001)
-- **Mobile:** React Native driver app with Expo (fuel logging, GPS, push notifications)
+This is a **desktop application** for managing the Malawi Judiciary fleet. Built with **Electron + Vite + React + TypeScript** and powered by **Supabase** for authentication and database operations.
 
-**Current Phase:** Phase 2 (Database & Backend) in progress; Phases 3-9 pending
+**Current State:** ✅ Authentication complete | ✅ Dashboard ready | ✅ 30+ database query functions | 🚀 Ready for feature expansion
+
+**Key Stack:**
+- **Frontend:** React 18 + TypeScript (Vite dev server on port 5173)
+- **Desktop:** Electron 27 (main process in `main.js`)
+- **Styling:** Tailwind CSS
+- **Icons:** Lucide React
+- **Database:** Supabase PostgreSQL (cloud-hosted)
+- **Authentication:** Supabase Auth (email/password, JWT-based sessions)
 
 ---
 
 ## 📂 Key Files & Structure
 
-### **Monorepo Root**
-- `package.json` — workspace scripts: `dev`, `dev:backend`, `dev:web`, `dev:mobile`, `build`, `test`, `lint`
-- `README.md` (300+ lines) — comprehensive architecture, phases 1-9, database schema
-- `QUICKSTART.md` — 5-minute setup guide (database, env, npm install)
-- `TRANSFORMATION_SUMMARY.md` — transformation from Jayflix to Fleet Management System
-- `.github/copilot-instructions.md` — this file
+### **Root Level**
+- `package.json` — scripts: `dev`, `dev:ui`, `dev:electron`, `build`, `preview`, `test`
+- `main.js` — Electron main process (window creation, dev server waiting)
+- `preload.js` — Electron preload script (IPC security layer)
+- `index.html` — Vite entry point
+- `vite.config.ts` — Vite + React configuration
+- `tailwind.config.js` — Tailwind CSS setup
+- `tsconfig.json` — TypeScript configuration
 
-### **Backend** (`backend/src/`)
-- `index.ts` — Express app, login page, router registration (routes not yet wired in)
-- `db/connection.ts` — PostgreSQL Pool config, auto-creates 6 tables on startup
-- `routes/` — 7 stub route files (auth, vehicles, drivers, fuel, maintenance, insurance, reports)
-- `middleware/errorHandler.ts` — error handling middleware, asyncHandler utility
-- `models/` — currently empty (database layer to be implemented)
+### **Source Code** (`src/`)
+- `App.tsx` — Main React component with authentication state, dashboard layout (263 lines)
+  - Session checking on mount
+  - Conditional rendering (Login vs Dashboard)
+  - User profile fetching from Supabase
+- `components/Login.tsx` — Supabase Auth UI (196 lines)
+  - Email/password login with error handling
+  - Gradient background (coral #EA7B7B to #D65A5A)
+  - Responsive mobile/desktop layout
+  - Loading states and password visibility toggle
+- `lib/supabaseQueries.ts` — Database query functions (431 lines, 30+ functions)
+  - User queries: `getCurrentUser()`, `getUserProfile()`, `updateUserProfile()`
+  - Vehicle queries: `getAllVehicles()`, `getVehicleById()`, `getVehiclesByStatus()`, etc.
+  - Fuel, maintenance, insurance queries
+  - All functions follow pattern: `initSupabase()` → query → `{ data, error }` tuple return
+- `assets/images/` — Background images (2.jpg used in login)
+- `index.css` — Global styles, custom CSS variables
 
-### **Web** (`web/app/`)
-- `page.tsx` — dashboard homepage with fleet status cards (hardcoded data)
-- `layout.tsx` — Next.js layout wrapper with global styles
-- `globals.css` — Tailwind reset and custom styles
-- `dashboard/`, `vehicles/`, `drivers/`, `reports/` — placeholder directories (pages not yet created)
-- `components/`, `lib/` — utilities ready for building dashboard features
-
-### **Mobile** (`mobile/src/`)
-- `screens/` — directory for driver app screens (not yet populated)
-- `navigation/` — navigation structure (not yet populated)
-- `store/` — Zustand store setup (not yet populated)
-- `app.json` — Expo config (Firebase, app name, permissions)
+### **Public Assets** (`public/assets/`)
+- Images and static files for UI
 
 ---
 
@@ -50,351 +58,214 @@ This is a **monorepo** managing a fleet for the Malawi Judiciary with three inde
 
 ### Initial Setup (Required Once)
 ```bash
-# Install all workspaces
+# Install dependencies
 npm install
-npm run install-workspaces
 
-# Create PostgreSQL database (if not exists)
-createdb fleet_management
-
-# Copy environment template to backend
-cp .env.example backend/.env
-# Edit backend/.env: set DB_PASSWORD, JWT_SECRET
+# Create .env.local (Supabase credentials already in code, but can override)
+cp .env.local.example .env.local
 ```
 
-### Start All Services (Backend + Web + Mobile)
+### Start Development (Single Command)
 ```bash
 npm run dev
 ```
-- Backend: `http://localhost:3000` (logs "Server running on port 3000")
-- Web: `http://localhost:3001` (Next.js dashboard)
-- Mobile: Expo Go app or simulator (follow terminal for QR code)
+- Vite dev server on `http://localhost:5173` (React app)
+- Electron app launches automatically and loads from Vite dev server
+- HMR (hot module replacement) enabled
+- Uses `waitForServer()` in `main.js` to ensure Vite is ready before loading
 
-### Start Individual Services
+### Start UI Only (No Electron)
 ```bash
-npm run dev:backend   # Express API only (port 3000)
-npm run dev:web       # Next.js dashboard (port 3001)
-npm run dev:mobile    # Expo for mobile (TBD)
+npm run dev:ui
 ```
+- Vite dev server only on `http://localhost:5173`
+- Useful for testing React components in browser
+
+### Start Electron Only (Using Built UI)
+```bash
+npm run dev:electron
+```
+- Requires `npm run build` first
+- Uses `dist/index.html` instead of dev server
+- NODE_ENV=development for dev tools
 
 ### Build for Production
 ```bash
-npm run build         # Build all three workspaces
-npm run build:backend # Backend only
-npm run build:web     # Web only
-npm run build:mobile  # Mobile only
+npm run build
 ```
+- Vite builds React app to `dist/`
+- Electron app can then load `dist/index.html`
+- No Electron build needed (uses current `main.js` and `preload.js`)
 
-### Database & Testing
+### Preview Production Build
 ```bash
-# Connect to PostgreSQL
-psql -U postgres -d fleet_management
-
-# Run all tests
-npm test
-
-# Lint all workspaces
-npm run lint
+npm run preview
 ```
+- Runs Vite preview server
+- Tests production build before packaging
 
-### Important: Routes Not Wired Yet
-⚠️ API routes in `backend/src/routes/` are **stubs** with TODO comments. They are not imported/registered in `backend/src/index.ts`. When implementing:
-1. Add route import to `backend/src/index.ts`
-2. Register with `app.use('/api/<feature>', featureRoutes)`
-3. Implement logic in the stub route files
+### Run Tests
+```bash
+npm run test
+```
+- Vitest (zero-config for Vite projects)
+- Test files collocated with components
 
 ---
 
 ## 🎨 Theme Colors & Styling Guidelines
 
-### Tailwind Color Palette
+### Tailwind Color Palette (Coral Theme)
 **Primary Colors:**
-- `coral` (#EA7B7B) — Main primary color for buttons, links, headers, highlights
-- `coral-dark` (#D65A5A) — Darker shade for backgrounds, gradients, hover states
+- `#EA7B7B` — Main coral primary (buttons, links, highlights)
+- `#D65A5A` — Darker coral (hover states, gradients)
 
 **Neutral Colors:**
-- `gray-900` (#111827) — Text headings, primary text
+- `gray-900` (#111827) — Text headings
 - `gray-600` (#4b5563) — Secondary text, labels
 - `gray-100` (#f3f4f6) — Light backgrounds
 - `white` (#ffffff) — Primary background
 
-**Status & Alert Colors:**
-- `red-50` (#fef2f2) — Error backgrounds
-- `red-200` (#fecaca) — Error borders
-- `red-700` (#b91c1c) — Error text
-- `green-600` (#16a34a) — Success indicators (when needed)
-- `yellow-600` (#ca8a04) — Warning indicators (when needed)
+**Status Colors:**
+- `red-700` (#b91c1c) — Error text/alerts
+- `green-600` (#16a34a) — Success (when needed)
+- `yellow-600` (#ca8a04) — Warning (when needed)
 
 **Gradients:**
-- `from-[#EA7B7B] to-[#D65A5A]` — Login sidebar gradient, premium sections
-- `bg-gradient-to-br` — Background to bottom-right direction
+- `from-[#EA7B7B] to-[#D65A5A]` — Login sidebar gradient (see `Login.tsx`)
+- `bg-gradient-to-br` — Bottom-right direction
 
-### Custom CSS Variables (in `src/index.css`)
-```css
---brand-purple-1: #2b0b4a    /* Dark purple from original design */
---brand-purple-2: #5a1fbf    /* Bright purple accent */
---brand-accent: #ffcf33      /* Warm golden accent for highlights */
---scrollbar-thumb: rgba(20,20,20,0.95)  /* Scrollbar styling */
-```
-
-### Component Color Usage
-- **Login Page:** Coral gradient (`from-[#EA7B7B] to-[#D65A5A]`), white form, red error messages
-- **Buttons:** Coral background (`bg-[#EA7B7B]`), white text, coral-dark on hover
-- **Headers:** Gray-900 text, optional coral accent underline
+### Component Patterns
+- **Login Page:** See `src/components/Login.tsx` for reference (coral gradient + white form)
+- **Buttons:** `bg-[#EA7B7B] hover:bg-[#D65A5A] text-white`
 - **Forms:** White background, gray-600 labels, coral focus states
-- **Cards:** White background, gray borders, coral icons/badges
-- **Errors:** Red-50 background, red-200 border, red-700 text
-- **Disabled State:** Gray-100 background, gray-400 text
-
-### Responsive Design
-- **Mobile-first:** Design for mobile first, enhance for desktop
-- **Breakpoints:** Use `md:` prefix for desktop features (see Login.tsx for example)
-- **Spacing:** Use Tailwind spacing scale (4px base unit: p-4 = 1rem)
-- **Icons:** Lucide React (import from 'lucide-react'), use `text-[#EA7B7B]` for primary icons
-
-### Dark Mode Considerations
-Current app uses light theme. If dark mode needed in future:
-- Invert backgrounds (white → dark gray/black)
-- Invert text (gray-900 → light gray)
-- Keep coral colors but use lighter shades (#F5A5A5 instead of #EA7B7B)
-- Maintain contrast ratios for accessibility (WCAG AA minimum)
+- **Cards:** White background, subtle gray borders
+- **Icons:** Lucide React (import from `lucide-react`)
+- **Responsive:** Mobile-first with `md:` prefix for desktop (see Login.tsx for example)
 
 ---
 
-## 🔑 Current State & Implementation Patterns
+## 🔑 Architecture & Key Patterns
 
-### What's Built vs. TODO
-✅ **Completed:**
-- Monorepo structure with workspaces
-- PostgreSQL database schema with 6 tables (users, drivers, vehicles, fuel_logs, maintenance_logs, insurance)
-- Backend Express server with middleware (error handler, asyncHandler)
-- 7 route file stubs (auth, vehicles, drivers, fuel, maintenance, insurance, reports)
-- Web dashboard homepage with fleet status cards (hardcoded data)
-- Mobile/Expo project structure
+### Authentication Flow (Supabase)
+1. **Session Check on App Mount** (`App.tsx` useEffect)
+   - Calls `sb.auth.getSession()` to restore user session
+   - If session exists, fetches user profile from `users` table
+   - Conditionally renders Dashboard or Login component
 
-❌ **TODO (Phase 2 & Beyond):**
-- Wire up routes in `backend/src/index.ts`
-- Implement authentication (JWT login, register, refresh)
-- Implement database queries in route handlers
-- Create models layer for DB queries
-- Build web dashboard pages (vehicles, drivers, reports)
-- Implement mobile screens and navigation
-- Firebase integration for notifications/storage
+2. **Login Process** (`Login.tsx`)
+   - User enters email/password
+   - `supabase.auth.signInWithPassword()` creates JWT session
+   - Session persisted in browser storage
+   - User profile loaded into state for dashboard display
 
-### User Roles & Access Control (Planned)
-- **Admin:** Full system access
-- **Fleet Manager:** Manage vehicles, drivers, fuel, maintenance, insurance
-- **Driver:** Log fuel, view assigned vehicle, receive notifications
-- **Auditor/Viewer:** Read-only access to reports
-- **Implementation:** Role stored in `users.role` column, JWT token includes role, middleware validates access
+3. **Logout**
+   - Clears session from Supabase
+   - Redirects to login screen
+   - All API queries require active session
 
-### Database Schema (Already Created)
-Tables auto-created on backend startup:
-- **users** (id, username, password_hash, email, role, created_at, updated_at)
-- **drivers** (id, user_id, license_number, license_expiry, retirement_date, assigned_vehicle_id, status, created_at, updated_at)
-- **vehicles** (id, registration_number, make, model, year, status, mileage, fuel_type, tank_capacity, created_at, updated_at)
-- **fuel_logs** (id, vehicle_id, driver_id, liters, cost, odometer, receipt_photo_url, date, created_at)
-- **maintenance_logs** (id, vehicle_id, service_type, cost, date, notes, created_at)
-- **insurance** (id, vehicle_id, provider, policy_number, expiry_date, coverage_amount, created_at, updated_at)
-
-All tables have timestamps and foreign key constraints.
-
-### Stub Route Structure
-All route files follow this pattern (see `backend/src/routes/auth.ts`):
+### Database Query Pattern
+All 30+ query functions in `lib/supabaseQueries.ts` follow consistent tuple return pattern:
 ```typescript
-import { Router } from 'express';
-const router = Router();
-
-router.post('/endpoint', async (req, res) => {
-  // TODO: Implement logic
-  res.json({ message: 'Endpoint description' });
-});
-
-export const featureRoutes = router;
-```
-
-### Vehicle Status Values (Planned)
-- `available` — ready for assignment
-- `in-use` — currently assigned
-- `under-maintenance` — scheduled for service
-- `out-of-service` — not fit for duty
-
-### Error Handling (Already in place)
-Use `asyncHandler` utility to wrap async route handlers:
-```typescript
-router.get('/path', asyncHandler(async (req, res) => {
-  // errors automatically caught and passed to errorHandler middleware
-}));
-```
-
-Response format (on error):
-```json
-{
-  "error": {
-    "statusCode": 400,
-    "message": "Error description",
-    "timestamp": "2026-01-09T..."
-  }
+export async function getVehicles() {
+  const sb = await initSupabase();
+  const { data, error } = await sb.from('vehicles').select('*');
+  return { data, error };  // Always return tuple
 }
+
+// Usage in components:
+const { data: vehicles, error } = await getVehicles();
+if (error) { /* handle error */ }
 ```
 
-### Environment Variables Required
-**Backend** (`backend/.env`):
-```
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=fleet_management
-JWT_SECRET=your_jwt_secret_key
-FIREBASE_API_KEY=optional_for_phase_5
-FIREBASE_PROJECT_ID=optional_for_phase_5
-```
+### State Management
+- **React hooks** for local component state (Login, App)
+- **Supabase session object** persisted automatically in browser storage
+- **No Redux/Context API** currently used (can add if needed for complex state)
 
-**Web** & **Mobile**: Use defaults or set `NEXT_PUBLIC_API_URL` / `EXPO_PUBLIC_API_URL` to `http://localhost:3000`
+### Supabase Tables (Cloud-hosted PostgreSQL)
+Auto-provisioned tables with JWT auth:
+- **users** — ID, name, role, email (Auth + DB)
+- **vehicles** — Registration, make, model, status, mileage
+- **drivers** — License, assigned vehicle, status
+- **fuel_logs** — Vehicle, driver, liters, cost, date
+- **maintenance_logs** — Service type, cost, date, notes
+- **insurance** — Provider, policy, expiry, coverage
 
-### TypeScript & Monorepo Conventions
-- Backend: `src/**/*.ts` → `dist/**/*.js` on build
-- Web: `.tsx` files in `app/` (Next.js App Router) and `components/`
-- Mobile: `.tsx` files in `src/` (Expo/React Native compatible)
-- Keep import paths relative within workspace
-- Run type checks: `npm run lint`
-
-### Styling Conventions
-- **Web:** Tailwind CSS utility-first (already configured in `tailwind.config.ts`)
-- **Mobile:** React Native StyleSheet; use flexbox layouts
-- **Color scheme:** Blue (#2563eb) primary, indigo secondary, red for alerts
+### Electron Main Process (`main.js`)
+- **waitForServer()** — Polls `http://localhost:5173` until Vite dev server is ready
+- **createWindow()** — Creates BrowserWindow, loads from Vite or dist
+- **preload.js** — Security layer for IPC (currently minimal)
+- Default: 1200x800, contextIsolation enabled, no Node.js in renderer
 
 ---
 
-## 🔧 Implementing Phase 2 Tasks (Current)
+## 🔧 Implementing Dashboard Features
 
-### Wiring up API routes (Priority 1)
-1. In `backend/src/index.ts`, add route imports:
-   ```typescript
-   import { authRoutes } from './routes/auth';
-   import { vehicleRoutes } from './routes/vehicles';
-   // ... etc
-   ```
-2. Register routes before error handler:
-   ```typescript
-   app.use('/api/auth', authRoutes);
-   app.use('/api/vehicles', vehicleRoutes);
-   // ... etc
-   ```
-3. Test with `curl` or Postman before moving to next route
+### Adding a New Dashboard Card/Widget
+1. Create component in `src/components/` (e.g., `VehicleStatsCard.tsx`)
+2. Use existing 30+ query functions from `src/lib/supabaseQueries.ts`
+3. Fetch data with `useEffect`, handle error/loading states
+4. Style using Tailwind: `bg-white p-6 rounded-lg border border-gray-200`
+5. Use Lucide icons for visual interest
+6. Example patterns in `App.tsx` dashboard section
 
-### Implementing a stub route
-1. Open `backend/src/routes/<feature>.ts`
-2. Replace TODO comments with actual logic
-3. Use `asyncHandler` for async operations:
-   ```typescript
-   router.post('/login', asyncHandler(async (req, res) => {
-     const { username, password } = req.body;
-     // Query database, validate, return JWT
-     res.json({ token: '...', user: { id, role } });
-   }));
-   ```
-4. Import `pool` from `backend/src/db/connection.ts` for queries
-5. Test with curl/Postman
+### Extending Supabase Queries
+1. Add new function to `src/lib/supabaseQueries.ts`
+2. Follow pattern: `initSupabase()` → `sb.from('table').select().where(...)` → `return { data, error }`
+3. Import and use in components immediately
+4. All queries use Supabase JS SDK (not SQL directly)
 
-### Adding database logic (models layer)
-1. Create `backend/src/models/<feature>.ts` (e.g., `userModel.ts`)
-2. Export async query functions using `pool`:
-   ```typescript
-   export async function getUserByUsername(username: string) {
-     const { rows } = await pool.query(
-       'SELECT * FROM users WHERE username = $1',
-       [username]
-     );
-     return rows[0];
-   }
-   ```
-3. Import and use in route handlers
-4. Keep SQL queries close to domain logic
+### Error Handling in Components
+- **Display errors:** Show toast/alert with error message from `{ data, error }` tuple
+- **Retry logic:** Wrap queries in try-catch, add retry button in UI
+- **Network:** Use optional chaining on results: `data?.vehicles?.length || 0`
 
-### Building Web dashboard pages
-1. Create `.tsx` file in `web/app/<feature>/page.tsx`
-2. Use Next.js App Router (automatic routes)
-3. Import components from `web/components/`
-4. Fetch from backend in `useEffect` or Server Component:
-   ```typescript
-   const response = await axios.get('http://localhost:3000/api/vehicles');
-   ```
-5. Use Tailwind utilities for styling (reference `web/app/page.tsx`)
-6. Import icons from `lucide-react`
-
-### Adding Mobile screens
-1. Create screen component in `mobile/src/screens/<Feature>Screen.tsx`
-2. Import `useNavigate()` from `@react-navigation/native`
-3. Use Zustand store for state management
-4. Make API calls using `axios` from store or screen
-5. Handle loading/error states
-6. Add screen to navigation in `mobile/src/navigation/`
-
-### Debugging
-- **Backend:** Add console.logs, check `backend/.env` has DB credentials
-- **Web:** Use React DevTools, check `http://localhost:3001` in browser
-- **Mobile:** Use `expo start`, scan QR code with Expo Go app, check console
-- **Database:** Test queries directly: `psql -U postgres -d fleet_management`
-- **API:** Test routes with curl or Postman before wiring to frontend
+### Adding Authentication Guards
+- Components only render after `isLoggedIn && !loading` check
+- Logout clears session and redirects to Login
+- Profile data cached in App state, refresh on demand
+- See `App.tsx` for full pattern
 
 ---
 
 ## 📋 Files to Open First When Investigating
 
-- **Project Overview:** `README.md`
-- **Backend Health:** `backend/src/index.ts`, `backend/src/db/connection.ts`
-- **Web Home:** `web/app/page.tsx` (dashboard design)
-- **API Routes:** `backend/src/routes/` (all endpoints)
-- **Database Schema:** `backend/src/db/connection.ts` (table definitions)
-- **Environment:** Root `.env` files in each workspace
-- **Config:** `tailwind.config.ts` (web), `tsconfig.json` (TS setup)
+- **Project Overview:** `README.md` (full architecture & features)
+- **Main App:** `src/App.tsx` (authentication state, dashboard layout)
+- **Login Component:** `src/components/Login.tsx` (Supabase Auth UI reference)
+- **Database Queries:** `src/lib/supabaseQueries.ts` (all 30+ query functions)
+- **Electron Process:** `main.js` (desktop app lifecycle)
+- **Build Config:** `vite.config.ts`, `tailwind.config.js`, `tsconfig.json`
+- **Demo Creds:** Email: `dingiswayochapomba@gmail.com` | Password: `@malawi2017`
 
 ---
 
-## 🎯 Phase Breakdown (Next Steps)
+## 🚀 Quick Reference: Essential Commands
 
-| Phase | Status | Owner | Timeline |
-|-------|--------|-------|----------|
-| 1. Requirements & Design | ✅ Done | PM | Dec 2025 |
-| 2. Backend & Database | 🔄 IN PROGRESS | Backend Team | Jan 2026 |
-| 3. Web Dashboard | ⏳ Pending | Frontend Team | Feb 2026 |
-| 4. Mobile App | ⏳ Pending | Mobile Team | Mar 2026 |
-| 5. Notifications & Alerts | ⏳ Pending | Backend | Apr 2026 |
-| 6. Reports & Analytics | ⏳ Pending | Frontend | May 2026 |
-| 7. Weather Integration | ⏳ Pending | Backend | May 2026 |
-| 8. Testing & Deployment | ⏳ Pending | QA/DevOps | Jun 2026 |
-| 9. Future Enhancements | 📝 Planned | Product | Q3+ 2026 |
+| Task | Command |
+|------|---------|
+| **Dev (Full)** | `npm run dev` → http://localhost:5173 (Electron loads from Vite) |
+| **Dev (Browser)** | `npm run dev:ui` → http://localhost:5173 (React only) |
+| **Build** | `npm run build` → outputs to `dist/` |
+| **Production** | `npm run dev:electron` (after build) or `npm run preview` |
+| **Test** | `npm run test` (Vitest) |
 
 ---
 
-## ❓ Common Questions
+## ✅ What's Complete & Ready to Use
 
-**Q: How do I add a new user role?**
-A: Add to `users` table `role` enum. Update middleware validation in `backend/src/middleware/auth.ts`. Update API endpoint guards accordingly.
+- ✅ Full Supabase authentication with JWT sessions
+- ✅ Dashboard with fleet summary cards
+- ✅ 30+ database query functions (users, vehicles, fuel, maintenance, insurance)
+- ✅ Error handling and loading states
+- ✅ Responsive design (mobile & desktop)
+- ✅ Theme styling (coral #EA7B7B, Tailwind)
 
-**Q: How do I enable push notifications?**
-A: Set up Firebase project, add admin SDK keys to `.env`, then implement `sendFCMNotification()` in backend routes. Client must request permission on app install.
+## 🚀 What's Next (Priority Order)
 
-**Q: How do I export reports to PDF?**
-A: Use `jspdf` library on web or `react-native-pdf-lib` on mobile. Backend can also use `pdfkit` for server-side generation.
-
-**Q: How do I track vehicle location in real-time?**
-A: Use GPS from mobile app, send lat/long to `/api/vehicles/:id/location` endpoint, store in DB, fetch on web dashboard. Requires Firebase Realtime Database or WebSocket for live updates.
-
----
-
-## 📞 Questions for Team
-
-- Preferred database hosting (AWS RDS, Neon, PlanetScale, local)?
-- Preferred backend hosting (Render, AWS Lambda, Heroku)?
-- Preferred mobile distribution (Play Store, internal beta, enterprise)?
-- Real-time updates needed? (WebSocket, Firebase, polling?)
-- Offline-first requirement for mobile? (sync on reconnect?)
-
----
-
-**Last Updated:** Jan 9, 2026
-**Project Lead:** Fleet Management Team
-**Maintained by:** Development Team
+1. **Add vehicle management page** — List, filter, detail view
+2. **Add driver management** — CRUD operations
+3. **Add fuel tracking** — Log consumption, cost analysis
+4. **Add maintenance scheduling** — Track service history
+5. **Add reports/analytics** — Export data, generate summaries

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import Login from './components/Login';
-import { LogOut } from 'lucide-react';
+import Sidebar from './components/Sidebar';
+import Header from './components/Header';
+import DashboardContent from './components/DashboardContent';
 
 // Initialize Supabase
 const SUPABASE_URL = 'https://ganrduvdyhlwkeiriaqp.supabase.co';
@@ -16,12 +18,23 @@ async function initSupabase() {
   return supabase;
 }
 
+// Tab configuration
+const tabNames: { [key: string]: string } = {
+  dashboard: 'Dashboard',
+  vehicles: 'Vehicles',
+  drivers: 'Drivers',
+  fuel: 'Fuel Tracking',
+  maintenance: 'Maintenance',
+  reports: 'Reports',
+};
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   // Check if user is already logged in
   useEffect(() => {
@@ -29,7 +42,7 @@ function App() {
       try {
         const sb = await initSupabase();
         const { data: { session }, error } = await sb.auth.getSession();
-        
+
         if (error) {
           console.error('Session error:', error);
           setLoading(false);
@@ -113,13 +126,14 @@ function App() {
       setLoggingOut(true);
       const sb = await initSupabase();
       const { error } = await sb.auth.signOut();
-      
+
       if (error) {
         console.error('Logout error:', error);
       } else {
         setIsLoggedIn(false);
         setUser(null);
         setUserProfile(null);
+        setActiveTab('dashboard');
         console.log('✓ Successfully logged out');
       }
     } catch (error) {
@@ -149,112 +163,55 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">🚗 Fleet Manager Dashboard</h1>
-              <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                <p>Welcome, <span className="font-semibold text-[#EA7B7B]">{userProfile?.name || user?.email}</span></p>
-                <span>•</span>
-                <p>Role: <span className="font-semibold text-[#EA7B7B] uppercase">{userProfile?.role}</span></p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-medium"
-            >
-              <LogOut size={18} />
-              {loggingOut ? 'Logging out...' : 'Logout'}
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onLogout={handleLogout}
+        userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
+        userRole={userProfile?.role || 'User'}
+        isLoggingOut={loggingOut}
+      />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Dashboard Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-[#EA7B7B]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Total Vehicles</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">0</p>
-              </div>
-              <div className="text-[#EA7B7B] text-3xl">🚗</div>
-            </div>
-          </div>
+      <div className="lg:ml-64 transition-all duration-300">
+        {/* Header */}
+        <Header
+          userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
+          userRole={userProfile?.role || 'User'}
+          activeTabLabel={tabNames[activeTab] || 'Dashboard'}
+        />
 
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Available Vehicles</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">0</p>
-              </div>
-              <div className="text-green-500 text-3xl">✓</div>
+        {/* Page Content */}
+        <main className="p-6 lg:p-8">
+          {activeTab === 'dashboard' && <DashboardContent />}
+          {activeTab === 'vehicles' && (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">Vehicles management coming soon...</p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">In Maintenance</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">0</p>
-              </div>
-              <div className="text-yellow-500 text-3xl">🔧</div>
+          )}
+          {activeTab === 'drivers' && (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">Drivers management coming soon...</p>
             </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-red-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Total Drivers</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">0</p>
-              </div>
-              <div className="text-red-500 text-3xl">👥</div>
+          )}
+          {activeTab === 'fuel' && (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">Fuel tracking coming soon...</p>
             </div>
-          </div>
-        </div>
-
-        {/* Features Section */}
-        <div className="bg-white rounded-lg shadow-md p-8 border border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Dashboard Features</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-              <p className="text-lg font-semibold text-gray-900">🚗 Vehicle Management</p>
-              <p className="text-gray-600 text-sm mt-2">Manage your fleet vehicles, track status, and maintenance schedules</p>
+          )}
+          {activeTab === 'maintenance' && (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">Maintenance tracking coming soon...</p>
             </div>
-            <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-              <p className="text-lg font-semibold text-gray-900">👨‍✈️ Driver Management</p>
-              <p className="text-gray-600 text-sm mt-2">Track drivers, licenses, assignments, and driving history</p>
+          )}
+          {activeTab === 'reports' && (
+            <div className="text-center py-12 text-gray-500">
+              <p className="text-lg">Reports coming soon...</p>
             </div>
-            <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-              <p className="text-lg font-semibold text-gray-900">⛽ Fuel Tracking</p>
-              <p className="text-gray-600 text-sm mt-2">Monitor fuel consumption and refueling transactions</p>
-            </div>
-            <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-              <p className="text-lg font-semibold text-gray-900">🔧 Maintenance</p>
-              <p className="text-gray-600 text-sm mt-2">Schedule and track vehicle maintenance and repairs</p>
-            </div>
-            <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-              <p className="text-lg font-semibold text-gray-900">📋 Insurance</p>
-              <p className="text-gray-600 text-sm mt-2">Manage insurance policies and coverage</p>
-            </div>
-            <div className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-              <p className="text-lg font-semibold text-gray-900">📊 Reports</p>
-              <p className="text-gray-600 text-sm mt-2">Generate comprehensive fleet analytics and reports</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Status Info */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <p className="text-blue-900 font-medium">✓ Authentication Status: Connected to Supabase</p>
-          <p className="text-blue-800 text-sm mt-2">All features are ready to use. The dashboard will be populated with real data from your database.</p>
-        </div>
+          )}
+        </main>
       </div>
     </div>
   );
