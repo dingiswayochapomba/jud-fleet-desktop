@@ -105,6 +105,62 @@ npm run lint
 
 ---
 
+## 🎨 Theme Colors & Styling Guidelines
+
+### Tailwind Color Palette
+**Primary Colors:**
+- `blue-600` (#2563eb) — Main primary color for buttons, links, headers, highlights
+- `blue-800` (#1e40af) — Darker shade for backgrounds, gradients, hover states
+
+**Neutral Colors:**
+- `gray-900` (#111827) — Text headings, primary text
+- `gray-600` (#4b5563) — Secondary text, labels
+- `gray-100` (#f3f4f6) — Light backgrounds
+- `white` (#ffffff) — Primary background
+
+**Status & Alert Colors:**
+- `red-50` (#fef2f2) — Error backgrounds
+- `red-200` (#fecaca) — Error borders
+- `red-700` (#b91c1c) — Error text
+- `green-600` (#16a34a) — Success indicators (when needed)
+- `yellow-600` (#ca8a04) — Warning indicators (when needed)
+
+**Gradients:**
+- `from-blue-600 to-blue-800` — Login sidebar gradient, premium sections
+- `bg-gradient-to-br` — Background to bottom-right direction
+
+### Custom CSS Variables (in `src/index.css`)
+```css
+--brand-purple-1: #2b0b4a    /* Dark purple from original design */
+--brand-purple-2: #5a1fbf    /* Bright purple accent */
+--brand-accent: #ffcf33      /* Warm golden accent for highlights */
+--scrollbar-thumb: rgba(20,20,20,0.95)  /* Scrollbar styling */
+```
+
+### Component Color Usage
+- **Login Page:** Blue gradient (`from-blue-600 to-blue-800`), white form, red error messages
+- **Buttons:** Blue background (`bg-blue-600`), white text, blue-800 on hover
+- **Headers:** Gray-900 text, optional blue accent underline
+- **Forms:** White background, gray-600 labels, blue-600 focus states
+- **Cards:** White background, gray borders, blue-600 icons/badges
+- **Errors:** Red-50 background, red-200 border, red-700 text
+- **Disabled State:** Gray-100 background, gray-400 text
+
+### Responsive Design
+- **Mobile-first:** Design for mobile first, enhance for desktop
+- **Breakpoints:** Use `md:` prefix for desktop features (see Login.tsx for example)
+- **Spacing:** Use Tailwind spacing scale (4px base unit: p-4 = 1rem)
+- **Icons:** Lucide React (import from 'lucide-react'), use `text-blue-600` for primary icons
+
+### Dark Mode Considerations
+Current app uses light theme. If dark mode needed in future:
+- Invert backgrounds (white → dark gray/black)
+- Invert text (gray-900 → light gray)
+- Keep blue colors but use lighter shades (blue-400 instead of blue-600)
+- Maintain contrast ratios for accessibility (WCAG AA minimum)
+
+---
+
 ## 🔑 Current State & Implementation Patterns
 
 ### What's Built vs. TODO
@@ -339,6 +395,6 @@ A: Use GPS from mobile app, send lat/long to `/api/vehicles/:id/location` endpoi
 
 ---
 
-**Last Updated:** Jan 8, 2026
+**Last Updated:** Jan 9, 2026
 **Project Lead:** Fleet Management Team
 **Maintained by:** Development Team
