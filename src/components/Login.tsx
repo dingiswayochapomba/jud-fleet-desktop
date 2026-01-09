@@ -68,7 +68,7 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
     <div className="min-h-screen w-screen flex items-center justify-center p-0 bg-gray-100">
       <div className="w-screen h-screen bg-white overflow-hidden flex flex-col md:flex-row">
         {/* Left Section - Background Image */}
-        <div className="hidden md:block w-1/2 relative bg-gradient-to-br from-blue-600 to-blue-800">
+        <div className="hidden md:block w-1/2 relative bg-gradient-to-br from-[#EA7B7B] to-[#D65A5A]">
           <div className="relative w-full h-full">
             <img
               src="/src/assets/images/2.jpg"
@@ -91,7 +91,7 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
             {/* Mobile Header */}
             <div className="md:hidden text-center mb-8">
               <div className="flex items-center justify-center mb-4">
-                <Truck size={32} className="text-blue-600" />
+                <Truck size={32} className="text-[#EA7B7B]" />
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Fleet Manager</h1>
               <p className="text-gray-600 text-sm mt-1">Judiciary Fleet Management System</p>

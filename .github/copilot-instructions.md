@@ -109,8 +109,8 @@ npm run lint
 
 ### Tailwind Color Palette
 **Primary Colors:**
-- `blue-600` (#2563eb) — Main primary color for buttons, links, headers, highlights
-- `blue-800` (#1e40af) — Darker shade for backgrounds, gradients, hover states
+- `coral` (#EA7B7B) — Main primary color for buttons, links, headers, highlights
+- `coral-dark` (#D65A5A) — Darker shade for backgrounds, gradients, hover states
 
 **Neutral Colors:**
 - `gray-900` (#111827) — Text headings, primary text
@@ -126,7 +126,7 @@ npm run lint
 - `yellow-600` (#ca8a04) — Warning indicators (when needed)
 
 **Gradients:**
-- `from-blue-600 to-blue-800` — Login sidebar gradient, premium sections
+- `from-[#EA7B7B] to-[#D65A5A]` — Login sidebar gradient, premium sections
 - `bg-gradient-to-br` — Background to bottom-right direction
 
 ### Custom CSS Variables (in `src/index.css`)
@@ -138,11 +138,11 @@ npm run lint
 ```
 
 ### Component Color Usage
-- **Login Page:** Blue gradient (`from-blue-600 to-blue-800`), white form, red error messages
-- **Buttons:** Blue background (`bg-blue-600`), white text, blue-800 on hover
-- **Headers:** Gray-900 text, optional blue accent underline
-- **Forms:** White background, gray-600 labels, blue-600 focus states
-- **Cards:** White background, gray borders, blue-600 icons/badges
+- **Login Page:** Coral gradient (`from-[#EA7B7B] to-[#D65A5A]`), white form, red error messages
+- **Buttons:** Coral background (`bg-[#EA7B7B]`), white text, coral-dark on hover
+- **Headers:** Gray-900 text, optional coral accent underline
+- **Forms:** White background, gray-600 labels, coral focus states
+- **Cards:** White background, gray borders, coral icons/badges
 - **Errors:** Red-50 background, red-200 border, red-700 text
 - **Disabled State:** Gray-100 background, gray-400 text
 
@@ -150,13 +150,13 @@ npm run lint
 - **Mobile-first:** Design for mobile first, enhance for desktop
 - **Breakpoints:** Use `md:` prefix for desktop features (see Login.tsx for example)
 - **Spacing:** Use Tailwind spacing scale (4px base unit: p-4 = 1rem)
-- **Icons:** Lucide React (import from 'lucide-react'), use `text-blue-600` for primary icons
+- **Icons:** Lucide React (import from 'lucide-react'), use `text-[#EA7B7B]` for primary icons
 
 ### Dark Mode Considerations
 Current app uses light theme. If dark mode needed in future:
 - Invert backgrounds (white → dark gray/black)
 - Invert text (gray-900 → light gray)
-- Keep blue colors but use lighter shades (blue-400 instead of blue-600)
+- Keep coral colors but use lighter shades (#F5A5A5 instead of #EA7B7B)
 - Maintain contrast ratios for accessibility (WCAG AA minimum)
 
 ---

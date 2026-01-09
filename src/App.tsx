@@ -157,9 +157,9 @@ function App() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">🚗 Fleet Manager Dashboard</h1>
               <div className="flex gap-4 mt-2 text-sm text-gray-600">
-                <p>Welcome, <span className="font-semibold text-blue-600">{userProfile?.name || user?.email}</span></p>
+                <p>Welcome, <span className="font-semibold text-[#EA7B7B]">{userProfile?.name || user?.email}</span></p>
                 <span>•</span>
-                <p>Role: <span className="font-semibold text-indigo-600 uppercase">{userProfile?.role}</span></p>
+                <p>Role: <span className="font-semibold text-[#EA7B7B] uppercase">{userProfile?.role}</span></p>
               </div>
             </div>
             <button
@@ -178,13 +178,13 @@ function App() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Dashboard Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500">
+          <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-[#EA7B7B]">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-600 text-sm">Total Vehicles</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">0</p>
               </div>
-              <div className="text-blue-500 text-3xl">🚗</div>
+              <div className="text-[#EA7B7B] text-3xl">🚗</div>
             </div>
           </div>
 
