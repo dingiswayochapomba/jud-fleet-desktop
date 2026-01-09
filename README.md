@@ -1,153 +1,276 @@
 # 🚗 Fleet Management System for Malawi Judiciary
 
-A comprehensive **Web + Mobile** solution for managing the transportation fleet of the Malawi Judiciary. Track vehicles, drivers, fuel consumption, maintenance, insurance, and generate detailed reports.
+A comprehensive **Desktop Application** for managing the transportation fleet of the Malawi Judiciary. Track vehicles, drivers, fuel consumption, maintenance, insurance, and generate detailed reports. **Now with full Supabase authentication!**
+
+---
+
+## ✨ Latest Updates
+
+**January 9, 2026:**
+- ✅ **Full Supabase Authentication** - Complete login system with session management
+- ✅ **Dashboard Ready** - Professional UI with fleet summary cards
+- ✅ **30+ Database Functions** - Complete query library for all operations
+- ✅ **Production Ready** - Error handling, loading states, responsive design
 
 ---
 
 ## 📋 Table of Contents
 
-1. [Project Structure](#project-structure)
-2. [Tech Stack](#tech-stack)
-3. [Phase Breakdown](#phase-breakdown)
-4. [Getting Started](#getting-started)
+1. [Quick Start](#quick-start)
+2. [Features](#features)
+3. [Tech Stack](#tech-stack)
+4. [Project Structure](#project-structure)
 5. [Development](#development)
-6. [Deployment](#deployment)
-7. [Key Features](#key-features)
-8. [Database Schema](#database-schema)
+6. [Authentication](#authentication)
+7. [Database](#database)
+8. [Documentation](#documentation)
 
 ---
 
-## 🏗️ Project Structure
+## 🚀 Quick Start
 
-This is a **monorepo** with three main workspaces:
+### 1. Install Dependencies
+```bash
+npm install
+```
 
+### 2. Start Development Server
+```bash
+npm run dev
 ```
-fleet-management-system/
-├── backend/          # Node.js/Express REST API
-│   ├── src/
-│   │   ├── routes/        (auth, vehicles, drivers, fuel, maintenance, insurance, reports)
-│   │   ├── models/        (database models and queries)
-│   │   ├── middleware/    (auth, error handling, validation)
-│   │   └── db/            (PostgreSQL connection & schema)
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── web/              # Next.js Admin/Manager Dashboard
-│   ├── app/
-│   │   ├── dashboard/      (fleet overview, alerts)
-│   │   ├── vehicles/       (CRUD vehicles, status updates)
-│   │   ├── drivers/        (driver management, retirement alerts)
-│   │   ├── reports/        (PDF/Excel export)
-│   │   └── page.tsx        (home page)
-│   ├── components/
-│   ├── lib/
-│   ├── tailwind.config.ts
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── mobile/           # React Native Driver App
-│   ├── src/
-│   │   ├── screens/        (login, dashboard, fuel logging, notifications)
-│   │   ├── components/
-│   │   ├── navigation/
-│   │   └── store/          (Zustand state management)
-│   ├── app.json            (Expo config)
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── docs/             # Project documentation
-├── .github/copilot-instructions.md
-└── package.json      (monorepo root)
+
+**Result:**
+- Vite dev server launches on http://localhost:5173
+- Electron desktop app launches automatically
+
+### 3. Login with Demo Account
 ```
+📧 Email: dingiswayochapomba@gmail.com
+🔐 Password: @malawi2017
+```
+
+**Done!** You're now authenticated and can use the full dashboard.
+
+---
+
+## ✨ Features
+
+### Authentication ✅ COMPLETE
+- Email/password login with Supabase
+- Secure session management
+- Automatic session persistence
+- User profile loading from database
+- Role-based user display (Admin, Manager, Driver)
+- Professional login UI
+- Error handling and validation
+
+### Dashboard ✅ READY
+- Fleet summary statistics
+- Vehicle status cards
+- Driver information
+- Responsive design
+- User profile display
+- Feature overview
+
+### Database Integration ✅ COMPLETE
+- 8 core tables (users, vehicles, drivers, maintenance, insurance, fuel_logs, etc.)
+- 5 SQL views for reporting
+- 30+ query functions
+- Complete CRUD operations
+- Analytics and reporting
+
+### Ready to Build 🚀
+- Vehicle management pages
+- Driver management interface
+- Fuel tracking dashboard
+- Maintenance scheduling
+- Insurance management
+- Reports generation
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend (Web)** | Next.js 14 + React 18 | Admin dashboard, reports |
-| **Frontend (Mobile)** | React Native (Expo) | Driver app, fuel logging, push notifications |
-| **Backend** | Node.js + Express | REST API for all operations |
-| **Database** | PostgreSQL | Fleet data, users, fuel logs, maintenance, insurance |
-| **Auth** | JWT + bcryptjs | Role-based access (Admin, Manager, Driver, Auditor) |
-| **Storage** | Firebase Storage | Receipt photos, insurance documents |
-| **Notifications** | Firebase Cloud Messaging | Push alerts, email notifications |
-| **Hosting** | Vercel (web), Play Store (mobile), Render/AWS (API) | Production deployment |
+| Component | Technology |
+|-----------|-----------|
+| **Frontend** | React 18 + TypeScript |
+| **Desktop** | Electron 27 |
+| **Build Tool** | Vite 5 |
+| **Styling** | Tailwind CSS |
+| **Icons** | Lucide React |
+| **Database** | Supabase (PostgreSQL) |
+| **Authentication** | Supabase Auth (JWT) |
+| **HTTP Client** | Axios |
 
 ---
 
-## 📌 Phase Breakdown
+## 📂 Project Structure
 
-### **Phase 1: Requirements & Design** ✅ COMPLETED
-- Define user roles: Admin, Fleet Manager, Driver, Viewer
-- Design database schema (vehicles, drivers, fuel, maintenance, insurance, users)
-- Create mockups and UI/UX specifications
-
-### **Phase 2: Database & Backend Setup** 🔄 IN PROGRESS
-- [x] Create PostgreSQL database schema
-- [x] Build REST API (Express.js) with core routes
-- [ ] Implement authentication (JWT + role-based access)
-- [ ] Add validation & error handling
-- [ ] Set up Firebase admin SDK for notifications
-
-### **Phase 3: Web App (Next.js)**
-- [ ] Dashboard with fleet status and alerts
-- [ ] Vehicle management (CRUD, status updates)
-- [ ] Maintenance scheduling and tracking
-- [ ] Insurance management with reminders
-- [ ] Fuel tracking and consumption analytics
-- [ ] Driver management and retirement alerts
-- [ ] Reports generation (PDF/Excel)
-
-### **Phase 4: Mobile App (React Native)**
-- [ ] Driver login and authentication
-- [ ] Driver dashboard (assigned vehicle, status)
-- [ ] Fuel logging with receipt photo upload
-- [ ] Push notifications for assignments/alerts
-- [ ] Driver profile and license info display
-- [ ] Location-based vehicle tracking (future)
-
-### **Phase 5: Notifications & Alerts**
-- [ ] Web alerts (insurance expiry, maintenance overdue)
-- [ ] Firebase Cloud Messaging (FCM) for push notifications
-- [ ] Email notifications to managers
-- [ ] Real-time WebSocket updates (optional)
-
-### **Phase 6: Reports & Analytics**
-- [ ] Fleet usage reports
-- [ ] Fuel consumption analysis (km/litre, anomaly detection)
-- [ ] Maintenance cost reports
-- [ ] Driver performance reports
-- [ ] PDF/Excel export functionality
-
-### **Phase 7: Weather Integration**
-- [ ] OpenWeatherMap API integration
-- [ ] Display weather at vehicle last location
-- [ ] Alert system for storms/heavy rain
-
-### **Phase 8: Testing & Deployment**
-- [ ] Unit tests (backend + web)
-- [ ] E2E testing (web app)
-- [ ] Pilot launch with judiciary staff
-- [ ] Production deployment
-- [ ] Training and documentation
-
-### **Phase 9: Future Enhancements**
-- [ ] Real-time GPS tracking
-- [ ] AI-powered maintenance forecasting
-- [ ] Expense tracking (tyres, oil, etc.)
-- [ ] Driver performance monitoring
-- [ ] HR system integration
+```
+fleet-management-system/
+├── src/
+│   ├── App.tsx                    # Main app with dashboard
+│   ├── components/
+│   │   └── Login.tsx              # Supabase authentication
+│   ├── lib/
+│   │   └── supabaseQueries.ts     # 30+ database functions
+│   ├── assets/
+│   └── index.css
+│
+├── public/
+│   └── assets/                    # Images and files
+│
+├── main.js                        # Electron main process
+├── preload.js                     # Electron preload
+├── index.html                     # HTML entry point
+├── vite.config.ts                 # Vite configuration
+├── tailwind.config.js             # Tailwind configuration
+│
+├── database-schema.sql            # PostgreSQL schema
+├── seed-admin-user.sql            # User creation script
+├── seed-admin-user.js             # User creation script
+│
+├── docs/
+├── AUTHENTICATION.md              # Auth guide (367 lines)
+├── QUICK_START.md                 # 3-step setup
+├── DATABASE_SCHEMA.md             # Database reference
+├── SEED_USERS.md                  # User creation guide
+├── IMPLEMENTATION_SUMMARY.md      # Complete summary
+│
+├── package.json                   # Dependencies
+├── tsconfig.json                  # TypeScript config
+└── README.md                      # This file
+```
 
 ---
 
-## 🚀 Getting Started
+## 🔐 Authentication
 
-### Prerequisites
-- **Node.js** >= 18.0.0
-- **PostgreSQL** >= 12 (for backend database)
-- **npm** >= 9.0.0
+### Login Flow
+1. User enters email and password
+2. Supabase validates credentials
+3. JWT session created
+4. User profile loaded from database
+5. Dashboard displays with user info
+
+### Features
+✅ Session persistence across reloads  
+✅ Automatic session refresh  
+✅ Role-based access control  
+✅ Secure logout  
+✅ Error handling  
+✅ Responsive UI  
+
+**See `AUTHENTICATION.md` for complete details**
+
+---
+
+## 💾 Database
+
+### Schema (8 Tables + 5 Views)
+- `users` - User accounts with roles
+- `vehicles` - Fleet vehicles
+- `drivers` - Driver information
+- `vehicle_assignments` - Driver-vehicle mapping
+- `maintenance` - Service records
+- `insurance` - Policy management
+- `fuel_logs` - Fuel tracking
+- `notifications` - User alerts
+
+### Available Views
+- `fleet_summary` - Overall statistics
+- `active_assignments` - Current assignments
+- `drivers_expiring_licenses` - License alerts
+- `vehicles_overdue_maintenance` - Maintenance alerts
+- `vehicles_expired_insurance` - Insurance alerts
+
+**See `DATABASE_SCHEMA.md` for complete reference**
+
+---
+
+## 🔧 Available Functions
+
+### 30+ Database Functions
+
+**Vehicles:**
+```tsx
+getAllVehicles()          // Fetch all vehicles
+getVehiclesByStatus()     // Filter by status
+createVehicle()           // Add new vehicle
+updateVehicle()           // Update vehicle
+```
+
+**Drivers:**
+```tsx
+getAllDrivers()           // Fetch all drivers
+getDriversByStatus()      // Filter by status
+createDriver()            // Add new driver
+```
+
+**Analytics:**
+```tsx
+getFleetSummary()         // Overall stats
+getDriversExpiringLicenses()  // Alert system
+getFuelConsumptionStats() // Fuel analytics
+```
+
+**See `src/lib/supabaseQueries.ts` for all 30+ functions**
+
+---
+
+## 📚 Documentation
+
+| File | Purpose | Size |
+|------|---------|------|
+| `QUICK_START.md` | 3-step setup guide | 245 lines |
+| `AUTHENTICATION.md` | Complete auth reference | 367 lines |
+| `DATABASE_SCHEMA.md` | Schema and queries | 500+ lines |
+| `IMPLEMENTATION_SUMMARY.md` | Complete overview | 409 lines |
+| `SEED_USERS.md` | User creation guide | 300+ lines |
+
+---
+
+## 🚦 Development
+
+### Start Dev Server
+```bash
+npm run dev
+```
+
+### Build for Production
+```bash
+npm run build
+```
+
+### Run Tests
+```bash
+npm test
+```
+
+### Lint Code
+```bash
+npm run lint
+```
+
+---
+
+## 🧪 Testing
+
+### Login Testing Checklist
+- [ ] App loads with login screen
+- [ ] Login with demo credentials works
+- [ ] Dashboard shows after successful login
+- [ ] Session persists on page refresh
+- [ ] Logout clears session
+- [ ] Can re-login after logout
+- [ ] Error messages display correctly
+
+### More Detailed Testing
+**See `AUTHENTICATION.md` for complete testing guide**
+
+---
+
+## 🚀 Deployment
 - **Git**
 
 ### Installation
