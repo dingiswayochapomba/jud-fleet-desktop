@@ -1,0 +1,33 @@
+{
+  "name": "fleet-management-system",
+  "version": "1.0.0",
+  "description": "Fleet Management System for Malawi Judiciary - Web + Mobile",
+  "main": "main.js",
+  "type": "module",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "web",
+    "mobile"
+  ],
+  "scripts": {
+    "install-all": "npm install && npm run install-workspaces",
+    "install-workspaces": "npm install --workspace=backend && npm install --workspace=web && npm install --workspace=mobile",
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=web\" \"npm run dev --workspace=mobile\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:web": "npm run dev --workspace=web",
+    "dev:ui": "npx vite --port 5173",
+    "dev:electron": "npx cross-env NODE_ENV=development electron .",
+    "dev:desktop": "concurrently \"npm run dev:backend\" \"npm run dev:ui\" \"npm run dev:electron\"",
+    "dev:mobile": "npm run dev --workspace=mobile",
+    "build": "npm run build --workspace=backend && npm run build --workspace=web && npm run build --workspace=mobile",
+    "build:backend": "npm run build --workspace=backend",
+    "build:web": "npm run build --workspace=web",
+    "build:mobile": "npm run build --workspace=mobile",
+    "test": "npm test --workspace=backend && npm test --workspace=web && npm test --workspace=mobile",
+    "lint": "npm run lint --workspace=backend && npm run lint --workspace=web && npm run lint --workspace=mobile"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
