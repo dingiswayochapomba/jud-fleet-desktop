@@ -69,13 +69,18 @@ CREATE TABLE vehicles (
   year INT,
   mileage BIGINT DEFAULT 0,
   status TEXT CHECK (status IN ('available', 'in_use', 'maintenance', 'broken', 'disposed')) DEFAULT 'available',
+  fuel_type TEXT CHECK (fuel_type IN ('diesel', 'petrol', 'hybrid', 'electric')) DEFAULT 'diesel',
+  chassis_number TEXT,
+  engine_number TEXT,
   purchase_date DATE,
+  insurance_expiry DATE,
   disposal_date DATE,
   created_at TIMESTAMP DEFAULT now()
 );
 
 CREATE INDEX idx_vehicles_registration ON vehicles(registration_number);
 CREATE INDEX idx_vehicles_status ON vehicles(status);
+CREATE INDEX idx_vehicles_insurance_expiry ON vehicles(insurance_expiry);
 
 -- ================================================================
 -- 4. VEHICLE_ASSIGNMENTS TABLE - Driver-to-vehicle assignments

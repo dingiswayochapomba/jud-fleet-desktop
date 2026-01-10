@@ -281,6 +281,24 @@ export async function updateInsurancePolicy(policyId: string, updates: any) {
   return { data, error };
 }
 
+export async function getAllInsurance() {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('insurance')
+    .select('*')
+    .order('expiry_date', { ascending: true });
+  return { data, error };
+}
+
+export async function deleteInsurancePolicy(policyId: string) {
+  const sb = await initSupabase();
+  const { error } = await sb
+    .from('insurance')
+    .delete()
+    .eq('id', policyId);
+  return { error };
+}
+
 // ====== FUEL LOGS ======
 
 export async function getFuelLogsByVehicle(vehicleId: string) {
@@ -300,6 +318,26 @@ export async function createFuelLog(fuelLogData: any) {
     .insert([fuelLogData])
     .select()
     .single();
+  return { data, error };
+}
+
+export async function updateFuelLog(fuelLogId: string, updates: any) {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('fuel_logs')
+    .update(updates)
+    .eq('id', fuelLogId)
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function deleteFuelLog(fuelLogId: string) {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('fuel_logs')
+    .delete()
+    .eq('id', fuelLogId);
   return { data, error };
 }
 
@@ -413,6 +451,56 @@ export async function getOverdueMaintenanceRecords() {
     .from('vehicles_overdue_maintenance')
     .select('*');
   return { data, error };
+}
+
+// ====== DISPOSAL ======
+
+export async function getAllDisposals() {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('vehicle_disposal')
+    .select('*')
+    .order('disposal_date', { ascending: false });
+  return { data, error };
+}
+
+export async function getDisposalByVehicle(vehicleId: string) {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('vehicle_disposal')
+    .select('*')
+    .eq('vehicle_id', vehicleId);
+  return { data, error };
+}
+
+export async function createDisposal(disposalData: any) {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('vehicle_disposal')
+    .insert([disposalData])
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function updateDisposal(disposalId: string, updates: any) {
+  const sb = await initSupabase();
+  const { data, error } = await sb
+    .from('vehicle_disposal')
+    .update(updates)
+    .eq('id', disposalId)
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function deleteDisposal(disposalId: string) {
+  const sb = await initSupabase();
+  const { error } = await sb
+    .from('vehicle_disposal')
+    .delete()
+    .eq('id', disposalId);
+  return { error };
 }
 
 // ====== AUTHENTICATION ======

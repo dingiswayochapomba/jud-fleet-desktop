@@ -3,6 +3,14 @@ import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardContent from './components/DashboardContent';
+import VehiclesManagement from './components/VehiclesManagement';
+import DriversManagement from './components/DriversManagement';
+import FuelTracking from './components/FuelTracking';
+import FuelAnalytics from './components/FuelAnalytics';
+import MaintenanceManagement from './components/MaintenanceManagement';
+import InsuranceManagement from './components/InsuranceManagement';
+import DisposalTracking from './components/DisposalTracking';
+import ReportsPage from './components/ReportsPage';
 
 // Initialize Supabase
 const SUPABASE_URL = 'https://ganrduvdyhlwkeiriaqp.supabase.co';
@@ -24,81 +32,22 @@ const tabNames: { [key: string]: string } = {
   vehicles: 'Vehicles',
   drivers: 'Drivers',
   fuel: 'Fuel Tracking',
+  fuel_analytics: 'Fuel Analytics',
   maintenance: 'Maintenance',
+  insurance: 'Insurance',
+  disposal: 'Disposal',
   reports: 'Reports',
+  settings: 'Account Settings',
 };
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
-
-  // Check if user is already logged in
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const sb = await initSupabase();
-        const { data: { session }, error } = await sb.auth.getSession();
-
-        if (error) {
-          console.error('Session error:', error);
-          setLoading(false);
-          return;
-        }
-
-        if (session?.user) {
-          setIsLoggedIn(true);
-          setUser(session.user);
-          // Fetch user profile from database
-          await fetchUserProfile(sb, session.user.id);
-        }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, []);
-
-  // Listen for auth state changes
-  useEffect(() => {
-    let subscription: any = null;
-
-    (async () => {
-      try {
-        const sb = await initSupabase();
-        const { data: { subscription: authSubscription } } = sb.auth.onAuthStateChange(
-          async (_event: any, session: any) => {
-            if (session?.user) {
-              setIsLoggedIn(true);
-              setUser(session.user);
-              await fetchUserProfile(sb, session.user.id);
-              console.log('✓ Auth state changed: User logged in');
-            } else {
-              setIsLoggedIn(false);
-              setUser(null);
-              setUserProfile(null);
-              console.log('✓ Auth state changed: User logged out');
-            }
-          }
-        );
-        subscription = authSubscription;
-      } catch (error) {
-        console.error('Auth listener setup failed:', error);
-      }
-    })();
-
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe();
-      }
-    };
-  }, []);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Fetch user profile from database
   const fetchUserProfile = useCallback(async (sb: any, userId: string) => {
@@ -121,42 +70,171 @@ function App() {
     }
   }, []);
 
+  // Check if user is already logged in
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let isMounted = true;
+    
+    const checkAuth = async () => {
+      try {
+        console.log('Starting auth check...');
+        const sb = await initSupabase();
+        
+        // Set a timeout to prevent infinite loading
+        timeoutId = setTimeout(() => {
+          console.warn('Auth check timeout - setting loading to false');
+          if (isMounted) setLoading(false);
+        }, 5000);
+        
+        const { data: { session }, error } = await sb.auth.getSession();
+
+        console.log('Session check result:', { hasSession: !!session, error });
+
+        if (error) {
+          console.error('Session error:', error);
+        }
+
+        if (isMounted) {
+          if (session?.user) {
+            console.log('User found in session:', session.user.email);
+            setIsLoggedIn(true);
+            setUser(session.user);
+            // Fetch user profile from database
+            try {
+              await fetchUserProfile(sb, session.user.id);
+            } catch (err) {
+              console.error('Profile fetch error:', err);
+            }
+          } else {
+            console.log('No active session found');
+          }
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    checkAuth();
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [fetchUserProfile]);
+
+  // Listen for auth state changes
+  useEffect(() => {
+    let subscription: any = null;
+    let isMounted = true;
+
+    (async () => {
+      try {
+        const sb = await initSupabase();
+        const { data: { subscription: authSubscription } } = sb.auth.onAuthStateChange(
+          async (event: any, session: any) => {
+            if (!isMounted) return;
+            
+            console.log('Auth event:', event, 'Session:', !!session);
+            
+            if (session?.user) {
+              if (isMounted) {
+                setIsLoggedIn(true);
+                setUser(session.user);
+              }
+              try {
+                await fetchUserProfile(sb, session.user.id);
+                if (isMounted) {
+                  console.log('✓ Auth state changed: User logged in');
+                }
+              } catch (err) {
+                console.error('Error fetching user profile:', err);
+              }
+            } else {
+              if (isMounted) {
+                setIsLoggedIn(false);
+                setUser(null);
+                setUserProfile(null);
+                setActiveTab('dashboard');
+                console.log('✓ Auth state changed: User logged out');
+              }
+            }
+          }
+        );
+        if (isMounted) {
+          subscription = authSubscription;
+        }
+      } catch (error) {
+        console.error('Auth listener setup failed:', error);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      if (subscription) {
+        try {
+          subscription.unsubscribe();
+          console.log('Auth subscription cleaned up');
+        } catch (err) {
+          console.error('Error unsubscribing from auth:', err);
+        }
+      }
+    };
+  }, [fetchUserProfile]);
+
   const handleLogout = async () => {
     try {
+      console.log('Logout initiated...');
       setLoggingOut(true);
-      const sb = await initSupabase();
-      const { error } = await sb.auth.signOut();
-
-      if (error) {
-        console.error('Logout error:', error);
-      } else {
+      
+      // Set a timeout to prevent infinite logout state
+      const timeoutId = setTimeout(() => {
+        console.warn('Logout timeout - forcing state clear');
         setIsLoggedIn(false);
         setUser(null);
         setUserProfile(null);
         setActiveTab('dashboard');
-        console.log('✓ Successfully logged out');
+        setLoggingOut(false);
+      }, 3000);
+      
+      const sb = await initSupabase();
+      
+      // Sign out from Supabase - this will trigger the auth state change listener
+      const { error } = await sb.auth.signOut();
+
+      clearTimeout(timeoutId);
+
+      if (error) {
+        console.error('Logout error:', error);
+        // Even if logout fails, clear local state
+        setIsLoggedIn(false);
+        setUser(null);
+        setUserProfile(null);
+        setActiveTab('dashboard');
+        setLoggingOut(false);
+        return;
       }
+
+      // Note: Don't manually set state here - let the auth listener handle it
+      // This prevents duplicate state updates and "signal aborted" errors
+      setLoggingOut(false);
+      console.log('✓ Session terminated successfully');
+      
     } catch (error) {
       console.error('Logout failed:', error);
-    } finally {
+      // Clear state anyway to show login page
+      setIsLoggedIn(false);
+      setUser(null);
+      setUserProfile(null);
+      setActiveTab('dashboard');
       setLoggingOut(false);
     }
   };
 
   const handleLoginSuccess = useCallback(() => {
     console.log('✓ Login callback triggered - UI will update via auth listener');
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-700 font-medium">Loading Fleet Manager...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [fetchUserProfile]);
 
   if (!isLoggedIn) {
     return <Login initSupabase={initSupabase} onLoginSuccess={handleLoginSuccess} />;
@@ -169,46 +247,95 @@ function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onLogout={handleLogout}
+        onSidebarToggle={setSidebarOpen}
         userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
         userRole={userProfile?.role || 'User'}
         isLoggingOut={loggingOut}
       />
 
       {/* Main Content */}
-      <div className="lg:ml-64 transition-all duration-300">
+      <div className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-52' : 'lg:ml-20'}`}>
         {/* Header */}
         <Header
           userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
           userRole={userProfile?.role || 'User'}
           activeTabLabel={tabNames[activeTab] || 'Dashboard'}
+          onLogout={handleLogout}
+          onSettingsClick={() => setActiveTab('settings')}
         />
 
         {/* Page Content */}
-        <main className="p-6 lg:p-8">
+        <main className="p-4 lg:p-6">
           {activeTab === 'dashboard' && <DashboardContent />}
-          {activeTab === 'vehicles' && (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-lg">Vehicles management coming soon...</p>
-            </div>
-          )}
-          {activeTab === 'drivers' && (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-lg">Drivers management coming soon...</p>
-            </div>
-          )}
-          {activeTab === 'fuel' && (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-lg">Fuel tracking coming soon...</p>
-            </div>
-          )}
-          {activeTab === 'maintenance' && (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-lg">Maintenance tracking coming soon...</p>
-            </div>
-          )}
-          {activeTab === 'reports' && (
-            <div className="text-center py-12 text-gray-500">
-              <p className="text-lg">Reports coming soon...</p>
+          {activeTab === 'vehicles' && <VehiclesManagement />}
+          {activeTab === 'drivers' && <DriversManagement />}
+          {activeTab === 'fuel' && <FuelTracking />}
+          {activeTab === 'fuel_analytics' && <FuelAnalytics />}
+          {activeTab === 'maintenance' && <MaintenanceManagement />}
+          {activeTab === 'insurance' && <InsuranceManagement />}
+          {activeTab === 'disposal' && <DisposalTracking />}
+          {activeTab === 'reports' && <ReportsPage />}
+          {activeTab === 'settings' && (
+            <div className="max-w-2xl">
+              <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">Account Settings</h2>
+                
+                {/* User Profile Section */}
+                <div className="mb-8 pb-8 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Profile Information</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                      <input 
+                        type="text" 
+                        value={userProfile?.name || user?.email?.split('@')[0] || ''} 
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input 
+                        type="email" 
+                        value={user?.email || ''} 
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                      <input 
+                        type="text" 
+                        value={userProfile?.role || 'User'} 
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3">Contact administrator to update profile information</p>
+                </div>
+
+                {/* Security Section */}
+                <div className="mb-8 pb-8 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Security</h3>
+                  <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm font-medium">
+                    Change Password
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2">Update your password regularly for security</p>
+                </div>
+
+                {/* Session Info */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Session</h3>
+                  <p className="text-sm text-gray-700 mb-4">You are logged in and your session is active.</p>
+                  <button 
+                    onClick={handleLogout}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-200 text-sm font-medium"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </main>

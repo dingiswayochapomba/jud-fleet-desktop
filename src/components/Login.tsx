@@ -91,16 +91,27 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
             {/* Mobile Header */}
             <div className="md:hidden text-center mb-8">
               <div className="flex items-center justify-center mb-4">
-                <Truck size={32} className="text-[#EA7B7B]" />
+                <img 
+                  src="/assets/images/logo.png" 
+                  alt="Judiciary Logo" 
+                  className="h-16 w-16 object-contain"
+                />
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Fleet Manager</h1>
               <p className="text-gray-600 text-sm mt-1">Judiciary Fleet Management System</p>
             </div>
 
-            {/* Desktop Header */}
+            {/* Desktop Header with Logo */}
             <div className="hidden md:block text-center mb-8">
+              <div className="flex items-center justify-center mb-4">
+                <img 
+                  src="/assets/images/logo.png" 
+                  alt="Judiciary Logo" 
+                  className="h-24 w-24 object-contain"
+                />
+              </div>
               <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
-              <p className="text-gray-600 text-sm mt-2">Sign in to your account</p>
+              <p className="text-gray-600 text-sm mt-2">Judiciary Fleet Management System</p>
             </div>
 
             {/* Error Message */}
