@@ -357,7 +357,7 @@ export default function DisposalTracking() {
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 font-medium">Total Disposed</p>
@@ -410,10 +410,10 @@ export default function DisposalTracking() {
       )}
 
       {/* Filters & Search */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm space-y-4">
         <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <span className="text-sm font-medium text-gray-700">Filters</span>
+          <Filter className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -445,14 +445,14 @@ export default function DisposalTracking() {
       </div>
 
       {/* Disposal Table */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {filteredDisposals.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Disposal Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-gray-200">Vehicle</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-gray-200">Disposal Date</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Method</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Buyer/Buyer</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Value (MWK)</th>
@@ -542,9 +542,9 @@ export default function DisposalTracking() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 {editingId ? 'Edit Disposal Record' : 'New Disposal Record'}
               </h2>
               <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-2xl font-light">

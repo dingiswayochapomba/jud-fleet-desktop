@@ -85,16 +85,16 @@ interface FeatureItemProps {
 
 function FeatureItem({ icon, title, description }: FeatureItemProps) {
   return (
-    <div className="p-3.5 rounded-lg bg-white border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200 group cursor-default">
+    <div className="p-3.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md transition-all duration-200 group cursor-default">
       <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100 transition-colors duration-200 flex-shrink-0">
+        <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50 transition-colors duration-200 flex-shrink-0">
           {icon}
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 mb-0.5 text-sm">
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-0.5 text-sm">
             {title}
           </h3>
-          <p className="text-xs text-gray-600">{description}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{description}</p>
         </div>
       </div>
     </div>
@@ -141,10 +141,10 @@ export default function DashboardContent() {
 
       {/* Driver & Fuel Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 h-80">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm p-4 h-80">
           <FuelConsumptionChart />
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 h-80">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm p-4 h-80">
           <VehicleStatusChart />
         </div>
       </div>

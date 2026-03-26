@@ -38,11 +38,14 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+const CHART_HEIGHT = 280;
+
 export default function FuelConsumptionChart() {
   return (
-    <div className="w-full h-full flex flex-col">
-      <h3 className="text-sm font-semibold text-gray-900 mb-3">Fuel Consumption</h3>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full flex flex-col min-h-0 min-w-0">
+      <h3 className="text-sm font-semibold text-gray-900 mb-3 shrink-0">Fuel Consumption</h3>
+      <div className="w-full min-w-0" style={{ height: CHART_HEIGHT }}>
+        <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
           <XAxis
@@ -82,7 +85,8 @@ export default function FuelConsumptionChart() {
             name="Target"
           />
         </LineChart>
-      </ResponsiveContainer>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

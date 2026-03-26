@@ -20,7 +20,7 @@ import {
   updateInsurancePolicy,
   deleteInsurancePolicy,
   getAllVehicles,
-} from '../lib/supabaseQueries';
+} from '../lib/firebaseQueries';
 
 interface Insurance {
   id: string;
@@ -337,11 +337,11 @@ export default function InsuranceManagement() {
       {/* Statistics Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 font-medium">Total Policies</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalPolicies}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Total Policies</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{stats.totalPolicies}</p>
               </div>
               <Shield className="w-12 h-12 text-[#EA7B7B] opacity-20" />
             </div>
@@ -382,21 +382,21 @@ export default function InsuranceManagement() {
       {/* Coverage & Premium Summary */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 font-medium flex items-center gap-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
                   Total Coverage
                 </p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">K{stats.totalCoverage.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">K{stats.totalCoverage.toLocaleString()}</p>
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 font-medium flex items-center gap-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium flex items-center gap-2">
                   <DollarSign className="w-4 h-4" />
                   Annual Premiums
                 </p>
@@ -408,14 +408,14 @@ export default function InsuranceManagement() {
       )}
 
       {/* Filters & Search */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm space-y-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm space-y-4">
         <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <span className="text-sm font-medium text-gray-700">Filters</span>
+          <Filter className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Search</label>
             <input
               type="text"
               placeholder="Search by provider, policy #, or vehicle..."
@@ -441,23 +441,23 @@ export default function InsuranceManagement() {
       </div>
 
       {/* Policies Table */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         {filteredPolicies.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Provider</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Policy #</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Coverage</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Premium</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Expiry Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Vehicle</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Provider</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Policy #</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Coverage</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Premium</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Expiry Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-900 dark:text-white">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredPolicies.map((policy) => {
                   const vehicle = vehicles.find((v) => v.id === policy.vehicle_id);
 

@@ -5,22 +5,33 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npx vite\" \"npx cross-env NODE_ENV=development electron .\"",
+    "start": "concurrently -k \"npx vite\" \"npx wait-on http://localhost:5173 -t 60000 && npx cross-env NODE_ENV=development electron .\"",
+    "dev": "npm run start",
     "dev:ui": "npx vite",
     "dev:electron": "npx cross-env NODE_ENV=development electron .",
     "build": "npx vite build",
+    "build:exe": "npm run build && npx electron-builder --win",
+    "build:exe:portable": "npm run build && npx electron-builder --win -p always",
     "preview": "npx vite preview",
-    "test": "vitest"
+    "test": "npx vitest",
+    "seed:firebase": "node migrations/seed-firebase.mjs",
+    "seed:firebase:drivers": "node migrations/seed-firebase-drivers.mjs",
+    "seed:firebase:vehicles": "node migrations/seed-firebase-vehicles.mjs",
+    "deploy:firestore-rules": "node scripts/deploy-firestore-rules.mjs",
+    "deploy:firestore-indexes": "node scripts/deploy-firestore-indexes.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
     "echarts": "^6.0.0",
+    "firebase": "^12.11.0",
+    "firebase-admin": "^13.7.0",
     "lucide-react": "^0.263.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.6.0"
   },
   "devDependencies": {
+    "@jimp/core": "^1.6.0",
+    "@jimp/png": "^0.22.12",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.2.1",
@@ -28,9 +39,33 @@
     "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "electron": "^27.2.0",
+    "electron-builder": "^26.8.1",
+    "google-auth-library": "^9.15.1",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.3.3",
-    "vite": "^5.4.8"
+    "vite": "^5.4.8",
+    "vitest": "^3.2.4",
+    "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "com.judiciary.fleet.desktop",
+    "productName": "Judiciary Fleet",
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "dir"
+      ],
+      "executableName": "Judiciary Fleet"
+    }
   }
 }

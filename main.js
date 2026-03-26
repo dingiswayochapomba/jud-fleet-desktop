@@ -22,12 +22,13 @@ async function waitForServer(url, timeout = 10000) {
   return false;
 }
 
-// Try multiple ports in case one is in use
-async function findAvailableServer(timeout = 10000) {
+// Try multiple ports in case one is in use (15s per port so Vite has time to start)
+async function findAvailableServer(totalTimeout = 60000) {
   const ports = [5173, 5174, 5175, 5176];
+  const perPort = Math.floor(totalTimeout / ports.length);
   for (const port of ports) {
     const url = `http://localhost:${port}`;
-    if (await waitForServer(url, 2000)) {
+    if (await waitForServer(url, perPort)) {
       return url;
     }
   }
@@ -39,6 +40,7 @@ async function createWindow() {
     width: 1200,
     height: 800,
     backgroundColor: '#ffffff',
+    icon: path.join(__dirname, 'src/assets/images/app-logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -49,11 +51,20 @@ async function createWindow() {
   const devUrl = process.env.DEV_URL || 'http://localhost:5173';
   if (process.env.NODE_ENV === 'development') {
     console.log('Looking for dev server...');
-    const serverUrl = await findAvailableServer(30000);
+    const serverUrl = await findAvailableServer(60000);
     
     if (!serverUrl) {
       console.error(`Dev server not found on any port`);
-      win.loadURL('data:text/html,<h1>Dev server not responding. Check console.</h1>');
+      const fallbackHtml = `
+        <!DOCTYPE html>
+        <html><head><meta charset="utf-8"><title>Dev server not ready</title></head>
+        <body style="font-family:sans-serif;max-width:480px;margin:80px auto;padding:24px;background:#f5f5f5;border-radius:8px;">
+          <h1 style="color:#c00;">Dev server not responding</h1>
+          <p>Run <code style="background:#ddd;padding:2px 6px;">npm start</code> (not <code>npm run dev:electron</code>) so both Vite and Electron start.</p>
+          <p>Close this window and run <strong>npm start</strong> in the project folder.</p>
+        </body></html>
+      `;
+      win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fallbackHtml));
       return win;
     }
     

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Eye, Truck, Loader } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { firebaseAuth } from '../lib/firebase';
 
 interface LoginProps {
-  initSupabase: () => Promise<any>;
   onLoginSuccess?: () => void;
 }
 
-export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
+export default function Login({ onLoginSuccess }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,8 +20,6 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
     setLoading(true);
 
     try {
-      const supabase = await initSupabase();
-
       // Validate inputs
       if (!email || !password) {
         setError('Please enter both email and password');
@@ -28,38 +27,28 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
         return;
       }
 
-      // Sign in with Supabase Auth
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-
-      if (signInError) {
-        if (signInError.message.includes('Invalid login credentials')) {
-          setError('Invalid email or password. Please try again.');
-        } else if (signInError.message.includes('Email not confirmed')) {
-          setError('Please confirm your email before logging in.');
-        } else {
-          setError(signInError.message || 'Login failed');
-        }
-        setLoading(false);
-        return;
-      }
-
-      if (data?.session) {
-        console.log('✓ Login successful:', data.session.user.email);
-        setEmail('');
-        setPassword('');
-        if (onLoginSuccess) {
-          onLoginSuccess();
-        }
-      } else {
-        setError('Login failed: No session created');
-        setLoading(false);
+      // Sign in with Firebase
+      await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      
+      console.log('✓ Login successful:', email);
+      setEmail('');
+      setPassword('');
+      if (onLoginSuccess) {
+        onLoginSuccess();
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'An unexpected error occurred');
+      
+      // Firebase error handling
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setError('Invalid email or password. Please try again.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('This account has been disabled.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many login attempts. Please try again later.');
+      } else {
+        setError(err.message || 'Login failed');
+      }
       setLoading(false);
     }
   };
@@ -92,9 +81,9 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
             <div className="md:hidden text-center mb-8">
               <div className="flex items-center justify-center mb-4">
                 <img 
-                  src="/assets/images/logo.png" 
+                  src="/src/assets/images/app-logo.png" 
                   alt="Judiciary Logo" 
-                  className="h-16 w-16 object-contain"
+                  className="h-16 w-auto object-contain"
                 />
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Fleet Manager</h1>
@@ -105,9 +94,9 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
             <div className="hidden md:block text-center mb-8">
               <div className="flex items-center justify-center mb-4">
                 <img 
-                  src="/assets/images/logo.png" 
+                  src="/src/assets/images/app-logo.png" 
                   alt="Judiciary Logo" 
-                  className="h-24 w-24 object-contain"
+                  className="h-24 w-auto object-contain"
                 />
               </div>
               <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
@@ -179,7 +168,7 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
+                className="w-full bg-gradient-to-r from-[#FF7DB0] to-[#E85FA0] hover:from-[#E85FA0] hover:to-[#D13D8F] text-white font-semibold py-2.5 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
               >
                 {loading ? (
                   <>
@@ -191,13 +180,6 @@ export default function Login({ initSupabase, onLoginSuccess }: LoginProps) {
                 )}
               </button>
             </form>
-
-            {/* Demo Credentials */}
-            <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-xs font-semibold text-blue-900 mb-2">📋 Demo Credentials:</p>
-              <p className="text-xs text-blue-800 font-mono mb-1">Email: dingiswayochapomba@gmail.com</p>
-              <p className="text-xs text-blue-800 font-mono">Password: @malawi2017</p>
-            </div>
           </div>
         </div>
       </div>

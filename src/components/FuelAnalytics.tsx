@@ -269,12 +269,12 @@ export default function FuelAnalytics() {
       </div>
 
       {/* Vehicle Selector */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-        <label className="block text-sm font-medium text-gray-700 mb-2">Select Vehicle</label>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Vehicle</label>
         <select
           value={selectedVehicle}
           onChange={(e) => setSelectedVehicle(e.target.value)}
-          className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent"
+          className="w-full md:w-64 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
         >
           {vehicles.map((vehicle) => (
             <option key={vehicle.id} value={vehicle.id}>
@@ -295,19 +295,19 @@ export default function FuelAnalytics() {
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Cost */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Cost</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total Cost</p>
             <DollarSign className="w-5 h-5 text-green-600 opacity-20" />
           </div>
-          <p className="text-2xl font-bold text-gray-900">K{stats.totalCost.toLocaleString()}</p>
-          <p className="text-xs text-gray-500 mt-1">All time</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">K{stats.totalCost.toLocaleString()}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">All time</p>
         </div>
 
         {/* Total Litres */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Litres</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total Litres</p>
             <Droplet className="w-5 h-5 text-blue-600 opacity-20" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{stats.totalLitres.toFixed(0)}L</p>
@@ -315,23 +315,23 @@ export default function FuelAnalytics() {
         </div>
 
         {/* Avg Fuel Efficiency */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fuel Efficiency</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Fuel Efficiency</p>
             <TrendingUp className="w-5 h-5 text-blue-600 opacity-20" />
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.avgFuelEfficiency.toFixed(2)}</p>
-          <p className="text-xs text-gray-500 mt-1">km/L</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.avgFuelEfficiency.toFixed(2)}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">km/L</p>
         </div>
 
         {/* Avg Monthly Cost */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Avg Monthly</p>
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Avg Monthly</p>
             <Calendar className="w-5 h-5 text-yellow-600 opacity-20" />
           </div>
-          <p className="text-2xl font-bold text-gray-900">K{stats.avgMonthlyCost.toLocaleString()}</p>
-          <p className="text-xs text-gray-500 mt-1">Monthly avg</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">K{stats.avgMonthlyCost.toLocaleString()}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Monthly avg</p>
         </div>
 
         {/* Anomalies */}
@@ -351,8 +351,8 @@ export default function FuelAnalytics() {
       {chartData.length > 0 && (
         <div className="space-y-6">
           {/* Fuel Consumption Trend */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Fuel Consumption Trend</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Fuel Consumption Trend</h2>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -381,8 +381,8 @@ export default function FuelAnalytics() {
           {/* Cost vs Consumption */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Cost Trend */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Cost Trend</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Cost Trend</h2>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -402,8 +402,8 @@ export default function FuelAnalytics() {
             </div>
 
             {/* Fuel Efficiency Trend */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Fuel Efficiency Trend</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Fuel Efficiency Trend</h2>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={chartData.filter((d) => d.efficiency > 0)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -432,8 +432,8 @@ export default function FuelAnalytics() {
 
           {/* Monthly Breakdown */}
           {monthlyData.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Monthly Breakdown (Last 12 Months)</h2>
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Monthly Breakdown (Last 12 Months)</h2>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -477,8 +477,8 @@ export default function FuelAnalytics() {
               </div>
 
               {/* Cost Distribution Pie */}
-              <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Cost Distribution</h2>
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Cost Distribution</h2>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -511,10 +511,10 @@ export default function FuelAnalytics() {
 
       {/* Empty State */}
       {chartData.length === 0 && !loading && (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center shadow-sm">
-          <Droplet className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 font-medium">No fuel data available</p>
-          <p className="text-gray-400 text-sm mt-1">Start by adding fuel logs to see analytics</p>
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center shadow-sm">
+          <Droplet className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">No fuel data available</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Start by adding fuel logs to see analytics</p>
         </div>
       )}
     </div>

@@ -29,6 +29,8 @@ CREATE TABLE users (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  firebase_uid TEXT UNIQUE,
+  auth_provider TEXT CHECK (auth_provider IN ('supabase', 'firebase')) DEFAULT 'supabase',
   role TEXT CHECK (role IN ('admin', 'manager', 'driver')) NOT NULL,
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()

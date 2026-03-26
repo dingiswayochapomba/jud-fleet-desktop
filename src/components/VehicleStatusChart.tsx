@@ -1,6 +1,7 @@
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -29,38 +30,37 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+const CHART_HEIGHT = 280;
+
 export default function VehicleStatusChart() {
   return (
-    <div className="w-full h-full flex flex-col">
-      <h3 className="text-sm font-semibold text-gray-900 mb-3">Vehicle Status</h3>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-          <XAxis
-            dataKey="status"
-            stroke="#9ca3af"
-            style={{ fontSize: '12px' }}
-            tick={{ fill: '#6b7280' }}
-          />
-          <YAxis
-            stroke="#9ca3af"
-            style={{ fontSize: '12px' }}
-            tick={{ fill: '#6b7280' }}
-            label={{ value: 'Count', angle: -90, position: 'insideLeft' }}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar
-            dataKey="count"
-            fill="#2563eb"
-            radius={[8, 8, 0, 0]}
-            isAnimationActive={true}
-          >
-            {data.map((entry, index) => (
-              <Bar key={`bar-${index}`} dataKey="count" fill={entry.fill} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="w-full flex flex-col min-h-0 min-w-0">
+      <h3 className="text-sm font-semibold text-gray-900 mb-3 shrink-0">Vehicle Status</h3>
+      <div className="w-full min-w-0" style={{ height: CHART_HEIGHT }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <XAxis
+              dataKey="status"
+              stroke="#9ca3af"
+              style={{ fontSize: '12px' }}
+              tick={{ fill: '#6b7280' }}
+            />
+            <YAxis
+              stroke="#9ca3af"
+              style={{ fontSize: '12px' }}
+              tick={{ fill: '#6b7280' }}
+              label={{ value: 'Count', angle: -90, position: 'insideLeft' }}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Bar dataKey="count" radius={[8, 8, 0, 0]} isAnimationActive={true}>
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

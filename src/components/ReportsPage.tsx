@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, BarChart3, TrendingUp, Filter, RefreshCw, AlertCircle, DollarSign, Users, Truck, PieChart } from 'lucide-react';
+import { Download, BarChart3, TrendingUp, Filter, RefreshCw, AlertCircle, DollarSign, Users, Truck, PieChart, Star, List } from 'lucide-react';
 import { BarChart, Bar, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend, ComposedChart, Line, PieChart as RechartsPie } from 'recharts';
 
 // Custom Tooltip Components (consistent with Dashboard)
@@ -167,37 +167,39 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 pb-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-lg p-6 text-white shadow-md">
+      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-xl p-8 text-white shadow-lg">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <BarChart3 size={28} />
-              <h1 className="text-2xl font-bold">Fleet Reports & Analytics</h1>
+              <div className="p-2.5 bg-white bg-opacity-20 rounded-lg backdrop-blur-sm">
+                <BarChart3 size={24} />
+              </div>
+              <h1 className="text-3xl font-bold">Fleet Reports & Analytics</h1>
             </div>
-            <p className="text-purple-100 text-sm">Comprehensive insights into your fleet operations</p>
+            <p className="text-purple-100 text-sm mt-1">Comprehensive insights into your fleet operations and performance metrics</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all font-medium text-sm backdrop-blur-sm border border-white border-opacity-30 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all font-semibold text-sm backdrop-blur-sm border border-white border-opacity-40 disabled:opacity-50"
             >
-              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
               Refresh
             </button>
             <button
               onClick={handleExportPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all font-medium text-sm backdrop-blur-sm border border-white border-opacity-30"
+              className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all font-semibold text-sm backdrop-blur-sm border border-white border-opacity-40"
             >
               📄 PDF
             </button>
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 px-6 py-2 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-all font-semibold shadow-lg hover:shadow-xl"
+              className="flex items-center gap-2 px-6 py-2 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-all font-bold shadow-lg hover:shadow-xl"
             >
-              <Download size={18} />
+              <Download size={16} />
               Export CSV
             </button>
           </div>
@@ -205,12 +207,14 @@ export default function ReportsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-gradient-to-r from-white to-gray-50 rounded-lg border border-gray-200 shadow-md p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter size={18} className="text-gray-700" />
-          <h3 className="font-bold text-gray-900">Filters</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-lg">
+            <Filter size={18} className="text-purple-600 dark:text-purple-400" />
+          </div>
+          <h3 className="font-bold text-gray-900 dark:text-white text-lg">Filters & Date Range</h3>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">From Date</label>
             <input
@@ -259,86 +263,106 @@ export default function ReportsPage() {
       </div>
 
       {/* KPI Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Vehicles */}
-        <div className="bg-gradient-to-br from-blue-50 to-cyan-100 rounded-lg p-1.5 border border-blue-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Total Vehicles</p>
-              <p className="text-lg font-bold text-blue-600 mt-0.5">{totalVehicles}</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">{totalVehicles}</p>
             </div>
-            <div className="p-1 bg-blue-200 rounded-lg group-hover:scale-110 transition-transform">
-              <Truck size={12} className="text-blue-600" />
+            <div className="p-2 bg-blue-200 rounded-lg group-hover:scale-110 transition-transform">
+              <Truck size={16} className="text-blue-600" />
             </div>
           </div>
-          <div className="text-xs text-blue-700 font-medium">{activeVehicles} Active</div>
+          <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-blue-500 to-blue-600" style={{ width: `${(activeVehicles / totalVehicles) * 100}%` }}></div>
+          </div>
+          <div className="text-xs text-blue-700 font-medium mt-2">{activeVehicles} Active</div>
         </div>
 
         {/* Total Cost */}
-        <div className="bg-gradient-to-br from-red-50 to-orange-100 rounded-lg p-1.5 border border-red-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 border border-orange-200 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Total Cost</p>
-              <p className="text-lg font-bold text-red-600 mt-0.5">MK{(totalCost / 1000).toFixed(0)}k</p>
+              <p className="text-2xl font-bold text-orange-600 mt-1">MK{(totalCost / 1000).toFixed(0)}k</p>
             </div>
-            <div className="p-1 bg-red-200 rounded-lg group-hover:scale-110 transition-transform">
-              <DollarSign size={12} className="text-red-600" />
+            <div className="p-2 bg-orange-200 rounded-lg group-hover:scale-110 transition-transform">
+              <DollarSign size={16} className="text-orange-600" />
             </div>
           </div>
-          <div className="text-xs text-red-700 font-medium">Period: {dateRange.from} to {dateRange.to}</div>
+          <div className="w-full h-1.5 bg-orange-200 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-orange-500 to-orange-600" style={{ width: '100%' }}></div>
+          </div>
+          <div className="text-xs text-orange-700 font-medium mt-2">This Period</div>
         </div>
 
         {/* Avg Cost Per Vehicle */}
-        <div className="bg-gradient-to-br from-purple-50 to-pink-100 rounded-lg p-1.5 border border-purple-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Avg Cost/Vehicle</p>
-              <p className="text-lg font-bold text-purple-600 mt-0.5">MK{(avgCostPerVehicle / 1000).toFixed(0)}k</p>
+              <p className="text-2xl font-bold text-purple-600 mt-1">MK{(avgCostPerVehicle / 1000).toFixed(0)}k</p>
             </div>
-            <div className="p-1 bg-purple-200 rounded-lg group-hover:scale-110 transition-transform">
-              <TrendingUp size={12} className="text-purple-600" />
+            <div className="p-2 bg-purple-200 rounded-lg group-hover:scale-110 transition-transform">
+              <TrendingUp size={16} className="text-purple-600" />
             </div>
           </div>
-          <div className="text-xs text-purple-700 font-medium">Maintenance + Fuel</div>
+          <div className="w-full h-1.5 bg-purple-200 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-purple-500 to-purple-600" style={{ width: '100%' }}></div>
+          </div>
+          <div className="text-xs text-purple-700 font-medium mt-2">Fleet Average</div>
         </div>
 
         {/* Total Drivers */}
-        <div className="bg-gradient-to-br from-emerald-50 to-green-100 rounded-lg p-1.5 border border-emerald-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Total Drivers</p>
-              <p className="text-lg font-bold text-emerald-600 mt-0.5">{totalDrivers}</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{totalDrivers}</p>
             </div>
-            <div className="p-1 bg-emerald-200 rounded-lg group-hover:scale-110 transition-transform">
-              <Users size={12} className="text-emerald-600" />
+            <div className="p-2 bg-emerald-200 rounded-lg group-hover:scale-110 transition-transform">
+              <Users size={16} className="text-emerald-600" />
             </div>
           </div>
-          <div className="text-xs text-emerald-700 font-medium">{totalTrips} trips completed</div>
+          <div className="w-full h-1.5 bg-emerald-200 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600" style={{ width: `${(totalTrips / 300) * 100}%` }}></div>
+          </div>
+          <div className="text-xs text-emerald-700 font-medium mt-2">{totalTrips} trips completed</div>
         </div>
 
         {/* Avg Driver Rating */}
-        <div className="bg-gradient-to-br from-yellow-50 to-amber-100 rounded-lg p-1.5 border border-yellow-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Avg Driver Rating</p>
-              <p className="text-lg font-bold text-amber-600 mt-0.5">⭐ {avgDriverRating}</p>
+              <p className="text-2xl font-bold text-yellow-600 mt-1">⭐ {avgDriverRating}</p>
             </div>
-            <div className="p-1 bg-yellow-200 rounded-lg group-hover:scale-110 transition-transform">
-              <PieChart size={12} className="text-amber-600" />
+            <div className="p-2 bg-yellow-200 rounded-lg group-hover:scale-110 transition-transform">
+              <PieChart size={16} className="text-yellow-600" />
             </div>
           </div>
-          <div className="text-xs text-amber-700 font-medium">Out of 5.0</div>
+          <div className="w-full h-1.5 bg-yellow-200 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-yellow-500 to-yellow-600" style={{ width: `${(parseFloat(avgDriverRating) / 5) * 100}%` }}></div>
+          </div>
+          <div className="text-xs text-yellow-700 font-medium mt-2">Out of 5.0</div>
         </div>
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Cost Trend */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-md p-5 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all p-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-bold text-gray-900 text-lg">📈 Monthly Cost Trend</h3>
-              <p className="text-xs text-gray-600 mt-1">Maintenance, Fuel & Insurance</p>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                  <BarChart3 size={16} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="font-bold text-gray-900 dark:text-white text-lg">Monthly Cost Trend</h3>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Maintenance, Fuel & Insurance</p>
             </div>
           </div>
           <div className="w-full h-64">
@@ -359,11 +383,16 @@ export default function ReportsPage() {
         </div>
 
         {/* Cost Breakdown */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-md p-5 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all p-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-bold text-gray-900 text-lg">💰 Cost Breakdown</h3>
-              <p className="text-xs text-gray-600 mt-1">Total: MK{(costBreakdownData.reduce((sum, item) => sum + item.value, 0) / 1000).toFixed(0)}k</p>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                  <DollarSign size={16} className="text-orange-600 dark:text-orange-400" />
+                </div>
+                <h3 className="font-bold text-gray-900 dark:text-white text-lg">Cost Breakdown</h3>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Total: MK{(costBreakdownData.reduce((sum, item) => sum + item.value, 0) / 1000).toFixed(0)}k</p>
             </div>
           </div>
           <div className="w-full h-64">
@@ -387,10 +416,15 @@ export default function ReportsPage() {
       </div>
 
       {/* Vehicle Statistics */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-md p-5 hover:shadow-lg transition-all">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all p-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="font-bold text-gray-900 text-lg">🚗 Vehicle Cost Analysis</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-2 bg-amber-100 dark:bg-amber-900 rounded-lg">
+                <TrendingUp size={16} className="text-amber-600 dark:text-amber-400" />
+              </div>
+              <h3 className="font-bold text-gray-900 dark:text-white text-lg">Vehicle Cost Analysis</h3>
+            </div>
             <p className="text-xs text-gray-600 mt-1">Maintenance and fuel costs by vehicle</p>
           </div>
           <div className="px-3 py-1.5 bg-blue-100 rounded-full">
@@ -419,21 +453,26 @@ export default function ReportsPage() {
         </div>
 
         {/* Status Pie */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-md p-5 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all p-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-bold text-gray-900 text-lg">📊 Vehicle Status</h3>
-              <p className="text-xs text-gray-600 mt-1">Active vs Inactive</p>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                  <BarChart3 size={16} className="text-purple-600 dark:text-purple-400" />
+                </div>
+                <h3 className="font-bold text-gray-900 dark:text-white text-lg">Vehicle Status</h3>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Active vs Inactive Distribution</p>
             </div>
           </div>
-          <div className="w-full h-60">
+          <div className="w-full h-64">
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPie
                 data={vehicleStatusData}
                 cx="50%"
                 cy="50%"
-                innerRadius={35}
-                outerRadius={75}
+                innerRadius={40}
+                outerRadius={90}
                 dataKey="value"
               >
                 {vehicleStatusData.map((item, index) => (
@@ -446,27 +485,32 @@ export default function ReportsPage() {
         </div>
 
         {/* Top Performers */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-md p-5 hover:shadow-lg transition-all">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all p-6">
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="font-bold text-gray-900 text-lg">🏆 Top Driver Performers</h3>
-              <p className="text-xs text-gray-600 mt-1">By average rating</p>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
+                  <Star size={16} className="text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <h3 className="font-bold text-gray-900 dark:text-white text-lg">Top Driver Performers</h3>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">By average rating</p>
             </div>
           </div>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
+          <div className="space-y-2 max-h-64 overflow-y-auto">
             {driverStats.sort((a, b) => b.averageRating - a.averageRating).map((driver, index) => (
-              <div key={driver.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg border border-gray-100 hover:border-blue-200 transition-all">
+              <div key={driver.id} className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-yellow-50 rounded-lg border border-gray-100 hover:border-yellow-200 transition-all group">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center text-white font-bold text-sm group-hover:scale-110 transition-transform">
                     {index + 1}
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-gray-900">{driver.name}</p>
+                    <p className="text-sm font-semibold text-gray-900">{driver.name}</p>
                     <p className="text-xs text-gray-600">{driver.tripsCompleted} trips</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-amber-600">⭐ {driver.averageRating}</p>
+                  <p className="text-sm font-bold text-amber-600">⭐ {driver.averageRating.toFixed(1)}</p>
                   <p className="text-xs text-gray-600">rating</p>
                 </div>
               </div>
@@ -476,25 +520,34 @@ export default function ReportsPage() {
       </div>
 
       {/* Detailed Vehicle Table */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-md overflow-hidden hover:shadow-lg transition-all">
-        <div className="p-5 border-b border-gray-200">
-          <h3 className="font-bold text-gray-900 text-lg">📋 Detailed Vehicle Report</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all overflow-hidden">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
+                <List size={16} className="text-slate-600 dark:text-slate-400" />
+              </div>
+              <h3 className="font-bold text-gray-900 dark:text-white text-lg">Detailed Vehicle Report</h3>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Complete fleet expense breakdown</p>
+          </div>
+          <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-full">{vehicleStats.length} Records</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700">
+            <thead className="bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-4 py-4 text-left font-bold text-white">🚗 Vehicle</th>
-                <th className="px-4 py-4 text-left font-bold text-white">🔧 Maintenance</th>
-                <th className="px-4 py-4 text-left font-bold text-white">⛽ Fuel</th>
-                <th className="px-4 py-4 text-left font-bold text-white">💰 Total Cost</th>
-                <th className="px-4 py-4 text-left font-bold text-white">📍 Mileage</th>
-                <th className="px-4 py-4 text-left font-bold text-white">🎯 Status</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-700">Vehicle</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-700">Maintenance</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-700">Fuel</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-700">Total Cost</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-700">Mileage</th>
+                <th className="px-4 py-4 text-left font-bold text-slate-700">Status</th>
               </tr>
             </thead>
             <tbody>
               {vehicleStats.map((vehicle, idx) => (
-                <tr key={vehicle.id} className={`border-b border-gray-100 hover:bg-purple-50 transition-all ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                <tr key={vehicle.id} className={`border-b border-gray-100 hover:bg-slate-50 transition-all ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                   <td className="px-4 py-3 font-bold text-gray-900">{vehicle.registration}</td>
                   <td className="px-4 py-3 text-gray-700 font-semibold">MK{vehicle.totalMaintenance.toLocaleString()}</td>
                   <td className="px-4 py-3 text-gray-700 font-semibold">MK{vehicle.totalFuel.toLocaleString()}</td>
@@ -517,13 +570,13 @@ export default function ReportsPage() {
       </div>
 
       {/* Driver Performance Table */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-md overflow-hidden hover:shadow-lg transition-all">
-        <div className="p-5 border-b border-gray-200">
-          <h3 className="font-bold text-gray-900 text-lg">👥 Driver Performance Report</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-md overflow-hidden hover:shadow-lg transition-all">
+        <div className="p-5 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="font-bold text-gray-900 dark:text-white text-lg">👥 Driver Performance Report</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700">
+            <thead className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 border-b border-slate-700 dark:border-slate-600">
               <tr>
                 <th className="px-4 py-4 text-left font-bold text-white">👤 Driver Name</th>
                 <th className="px-4 py-4 text-left font-bold text-white">🚗 Vehicles Assigned</th>

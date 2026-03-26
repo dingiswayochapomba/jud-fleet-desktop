@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
-  Truck,
   Users,
+  Users2,
+  Truck,
   Zap,
   Wrench,
   FileText,
@@ -14,6 +15,7 @@ import {
   Shield,
   TrendingUp,
 } from 'lucide-react';
+import appLogo from '../assets/images/app-logo.png';
 
 interface SidebarProps {
   activeTab: string;
@@ -29,6 +31,7 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'vehicles', label: 'Vehicles', icon: Truck },
   { id: 'drivers', label: 'Drivers', icon: Users },
+  { id: 'users', label: 'Users', icon: Users2 },
   { id: 'fuel', label: 'Fuel Tracking', icon: Zap },
   { id: 'fuel_analytics', label: 'Fuel Analytics', icon: TrendingUp },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench },
@@ -44,11 +47,18 @@ export default function Sidebar({
   onSidebarToggle,
   isLoggingOut,
 }: SidebarProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(() => {
+    const saved = localStorage.getItem('sidebarOpen');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sidebarOpen', JSON.stringify(isOpen));
+    onSidebarToggle?.(isOpen);
+  }, [isOpen, onSidebarToggle]);
 
   const handleToggle = (newState: boolean) => {
     setIsOpen(newState);
-    onSidebarToggle?.(newState);
   };
 
   return (
@@ -56,83 +66,77 @@ export default function Sidebar({
       {/* Mobile Toggle Button */}
       <button
         onClick={() => handleToggle(!isOpen)}
-        className="fixed top-4 left-4 z-50 lg:hidden p-2 rounded-md bg-white shadow-md hover:bg-gray-50 transition-colors border border-gray-200"
+        className="fixed top-4 left-4 z-50 lg:hidden p-2 rounded-md bg-white dark:bg-gray-800 shadow-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700"
       >
-        {isOpen ? <X size={20} className="text-gray-700" /> : <Menu size={20} className="text-gray-700" />}
+        {isOpen ? <X size={20} className="text-gray-700 dark:text-gray-300" /> : <Menu size={20} className="text-gray-700 dark:text-gray-300" />}
       </button>
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-screen bg-slate-800 border-r border-slate-700 text-white shadow-lg transition-all duration-300 ease-out transform ${
+        className={`fixed top-0 left-0 h-screen border-r border-gray-300 dark:border-gray-700 bg-gray-200 dark:bg-gray-800 shadow-lg transition-all duration-300 ease-out transform ${
           isOpen ? 'w-52 translate-x-0' : 'w-20 -translate-x-full lg:translate-x-0'
         } lg:translate-x-0 z-40 flex flex-col`}
       >
         {/* Logo Section */}
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+        <div className="p-4 border-b border-gray-300 dark:border-gray-700 flex items-center justify-between">
           {isOpen && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
-                <Truck size={18} className="text-white" />
-              </div>
-              <h1 className="text-base font-bold text-white">Fleet</h1>
+              <img 
+                src={appLogo} 
+                alt="Fleet Logo" 
+                className="w-8 h-8 rounded-md object-cover"
+              />
+              <h1 className="text-base font-bold text-black dark:text-white">Fleet</h1>
             </div>
           )}
           {!isOpen && (
             <div className="w-full flex justify-center">
-              <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center">
-                <Truck size={18} className="text-white" />
-              </div>
+              <img 
+                src={appLogo} 
+                alt="Fleet Logo" 
+                className="w-8 h-8 rounded-md object-cover"
+              />
             </div>
           )}
           <button
             onClick={() => handleToggle(!isOpen)}
-            className="hidden lg:flex p-1 hover:bg-slate-700 rounded transition-colors"
+            className="hidden lg:flex p-1 rounded transition-colors hover:bg-gray-300 dark:hover:bg-gray-700"
           >
-            <ChevronLeft size={18} className={`transition-transform duration-300 ${
+            <ChevronLeft size={18} className={`text-black dark:text-white transition-transform duration-300 ${
               isOpen ? 'rotate-0' : 'rotate-180'
             }`} />
           </button>
         </div>
 
         {/* Menu Items */}
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => {
+        <nav className="flex-1 px-2 py-4 overflow-y-auto">
+          {menuItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 
             return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  onTabChange(item.id);
-                  if (!isOpen) setIsOpen(true);
-                }}
-                title={!isOpen ? item.label : ''}
-                className={`w-full px-3 py-2 rounded-md transition-all duration-200 flex items-center gap-3 ${
-                  isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                }`}
-              >
-                <Icon size={18} className="flex-shrink-0" />
-                {isOpen && <span className="text-sm font-medium">{item.label}</span>}
-              </button>
+              <div key={item.id}>
+                <button
+                  onClick={() => {
+                    onTabChange(item.id);
+                  }}
+                  title={!isOpen ? item.label : ''}
+                  className={`w-full px-3 py-2.5 rounded-lg transition-all duration-200 flex items-center gap-3 font-medium ${
+                    isActive
+                      ? 'bg-gray-300 dark:bg-gray-700 text-black dark:text-white shadow-md scale-105'
+                      : 'text-black dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 hover:text-black dark:hover:text-white'
+                  }`}
+                >
+                  <Icon size={18} className="flex-shrink-0" />
+                  {isOpen && <span className="text-sm">{item.label}</span>}
+                </button>
+                {index < menuItems.length - 1 && (
+                  <div className="my-2 border-t border-gray-300 dark:border-gray-700" />
+                )}
+              </div>
             );
           })}
         </nav>
-
-        {/* Logout Button */}
-        <div className="px-2 py-3 border-t border-slate-700">
-          <button
-            onClick={onLogout}
-            disabled={isLoggingOut}
-            title={!isOpen ? 'Logout' : ''}
-            className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-md transition-colors flex items-center gap-3 font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            <LogOut size={18} className="flex-shrink-0" />
-            {isOpen && <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>}
-          </button>
-        </div>
       </aside>
 
       {/* Overlay for mobile */}

@@ -312,18 +312,18 @@ export default function MaintenanceManagement() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-800 rounded-lg p-3 text-white shadow-md">
+      <div className="bg-gradient-to-r from-[#44444E] via-[#3A3A42] to-[#303036] rounded-lg p-3 text-white shadow-md">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Wrench size={18} />
               <h1 className="text-lg font-bold">Maintenance Management</h1>
             </div>
-            <p className="text-purple-100 text-xs">Track vehicle maintenance and service records</p>
+            <p className="text-gray-300 text-xs">Track vehicle maintenance and service records</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <button
-              className="flex items-center gap-2 px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all font-medium text-sm backdrop-blur-sm border border-white border-opacity-30"
+              className="flex items-center gap-1 px-3 py-1.5 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30 transition-all font-medium text-xs backdrop-blur-sm border border-white border-opacity-30"
               title="Export report"
             >
               📊
@@ -331,9 +331,9 @@ export default function MaintenanceManagement() {
             </button>
             <button
               onClick={handleAddRecord}
-              className="flex items-center gap-2 px-6 py-2.5 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-all font-semibold shadow-lg hover:shadow-xl"
+              className="flex items-center gap-2 px-4 py-1.5 bg-white text-[#44444E] rounded-lg hover:bg-gray-100 transition-all font-semibold shadow-lg hover:shadow-xl text-sm"
             >
-              <Plus size={20} />
+              <Plus size={18} />
               Add Record
             </button>
           </div>
@@ -343,66 +343,66 @@ export default function MaintenanceManagement() {
       {/* KPI Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
         {/* Total Cost */}
-        <div className="bg-gradient-to-br from-red-50 to-orange-100 rounded-lg p-1.5 border border-red-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-lg p-2.5 border border-red-200 shadow-sm hover:shadow-md transition-all group cursor-default">
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Total Cost</p>
-              <p className="text-lg font-bold text-red-600 mt-1">MK{(totalCost / 1000).toFixed(0)}k</p>
+              <p className="text-xs text-gray-600 font-semibold uppercase tracking-tight leading-none">Total Cost</p>
+              <p className="text-base font-bold text-red-600 mt-1.5">MK{(totalCost / 1000).toFixed(0)}k</p>
             </div>
-            <div className="p-1 bg-red-200 rounded-lg group-hover:scale-110 transition-transform">
-              <TrendingUp size={12} className="text-red-600" />
+            <div className="p-1.5 bg-red-100 rounded-lg group-hover:scale-105 transition-transform flex-shrink-0">
+              <TrendingUp size={14} className="text-red-600" />
             </div>
           </div>
-          <div className="w-full h-2 bg-red-200 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-red-500 to-orange-600" style={{ width: '100%' }}></div>
+          <div className="w-full h-1.5 bg-red-200 rounded-full overflow-hidden mt-2">
+            <div className="h-full bg-gradient-to-r from-red-500 to-orange-500" style={{ width: '100%' }}></div>
           </div>
         </div>
 
         {/* Completed Services */}
-        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-1.5 border border-emerald-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-2.5 border border-emerald-200 shadow-sm hover:shadow-md transition-all group cursor-default">
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Completed</p>
-              <p className="text-lg font-bold text-emerald-600 mt-1">{completedCount}</p>
+              <p className="text-xs text-gray-600 font-semibold uppercase tracking-tight leading-none">Completed</p>
+              <p className="text-base font-bold text-emerald-600 mt-1.5">{completedCount}</p>
             </div>
-            <div className="p-1 bg-emerald-200 rounded-lg group-hover:scale-110 transition-transform">
-              <Wrench size={12} className="text-emerald-600" />
+            <div className="p-1.5 bg-emerald-100 rounded-lg group-hover:scale-105 transition-transform flex-shrink-0">
+              <Wrench size={14} className="text-emerald-600" />
             </div>
           </div>
-          <div className="w-full h-2 bg-emerald-200 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600" style={{ width: `${records.length > 0 ? (completedCount / records.length) * 100 : 0}%` }}></div>
+          <div className="w-full h-1.5 bg-emerald-200 rounded-full overflow-hidden mt-2">
+            <div className="h-full bg-gradient-to-r from-emerald-500 to-green-500" style={{ width: `${records.length > 0 ? (completedCount / records.length) * 100 : 0}%` }}></div>
           </div>
         </div>
 
         {/* Scheduled Services */}
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-1.5 border border-blue-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-2.5 border border-blue-200 shadow-sm hover:shadow-md transition-all group cursor-default">
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">Scheduled</p>
-              <p className="text-lg font-bold text-blue-600 mt-1">{scheduledCount}</p>
+              <p className="text-xs text-gray-600 font-semibold uppercase tracking-tight leading-none">Scheduled</p>
+              <p className="text-base font-bold text-blue-600 mt-1.5">{scheduledCount}</p>
             </div>
-            <div className="p-1 bg-blue-200 rounded-lg group-hover:scale-110 transition-transform">
-              <Calendar size={12} className="text-blue-600" />
+            <div className="p-1.5 bg-blue-100 rounded-lg group-hover:scale-105 transition-transform flex-shrink-0">
+              <Calendar size={14} className="text-blue-600" />
             </div>
           </div>
-          <div className="w-full h-2 bg-blue-200 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-500 to-blue-600" style={{ width: `${records.length > 0 ? (scheduledCount / records.length) * 100 : 0}%` }}></div>
+          <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden mt-2">
+            <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500" style={{ width: `${records.length > 0 ? (scheduledCount / records.length) * 100 : 0}%` }}></div>
           </div>
         </div>
 
         {/* In Progress */}
-        <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-1.5 border border-amber-200 shadow-sm hover:shadow-md transition-all group">
-          <div className="flex items-start justify-between mb-1">
+        <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-2.5 border border-amber-200 shadow-sm hover:shadow-md transition-all group cursor-default">
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">In Progress</p>
-              <p className="text-lg font-bold text-amber-600 mt-1">{inProgressCount}</p>
+              <p className="text-xs text-gray-600 font-semibold uppercase tracking-tight leading-none">In Progress</p>
+              <p className="text-base font-bold text-amber-600 mt-1.5">{inProgressCount}</p>
             </div>
-            <div className="p-1 bg-amber-200 rounded-lg group-hover:scale-110 transition-transform">
-              <AlertTriangle size={12} className="text-amber-600" />
+            <div className="p-1.5 bg-amber-100 rounded-lg group-hover:scale-105 transition-transform flex-shrink-0">
+              <AlertTriangle size={14} className="text-amber-600" />
             </div>
           </div>
-          <div className="w-full h-2 bg-amber-200 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-amber-500 to-amber-600" style={{ width: `${records.length > 0 ? (inProgressCount / records.length) * 100 : 0}%` }}></div>
+          <div className="w-full h-1.5 bg-amber-200 rounded-full overflow-hidden mt-2">
+            <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: `${records.length > 0 ? (inProgressCount / records.length) * 100 : 0}%` }}></div>
           </div>
         </div>
       </div>
@@ -581,10 +581,10 @@ export default function MaintenanceManagement() {
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-md overflow-hidden hover:shadow-lg transition-all">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-md overflow-hidden hover:shadow-lg transition-all">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700">
+              <thead className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 border-b border-slate-700 dark:border-slate-600">
                 <tr>
                   <th className="px-4 py-4 text-left font-bold text-white">🚗 Vehicle</th>
                   <th className="px-4 py-4 text-left font-bold text-white">🔧 Service Type</th>
@@ -652,7 +652,7 @@ export default function MaintenanceManagement() {
       {/* Add/Edit Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-r from-purple-600 to-indigo-700 px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">{editingId ? 'Edit Maintenance Record' : 'Add New Maintenance Record'}</h2>
               <button
@@ -802,7 +802,7 @@ export default function MaintenanceManagement() {
       {/* View Details Modal */}
       {viewingRecord && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="bg-gradient-to-r from-purple-600 to-indigo-700 px-6 py-4 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">Maintenance Record Details</h2>
               <button
@@ -892,17 +892,17 @@ export default function MaintenanceManagement() {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-sm">
             <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full mb-4">
-                <AlertCircle size={24} className="text-red-600" />
+              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 dark:bg-red-900 rounded-full mb-4">
+                <AlertCircle size={24} className="text-red-600 dark:text-red-400" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 text-center mb-2">Delete Record?</h3>
-              <p className="text-gray-600 text-center text-sm mb-6">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white text-center mb-2">Delete Record?</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-center text-sm mb-6">
                 This action cannot be undone. The maintenance record will be permanently deleted.
               </p>
             </div>
-            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
+            <div className="bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 px-6 py-4 flex items-center justify-end gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium text-sm"
