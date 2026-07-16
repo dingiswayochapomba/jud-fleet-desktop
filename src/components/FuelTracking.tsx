@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
 import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from 'recharts';
+import {
   Fuel,
   Plus,
   Trash2,
@@ -19,6 +30,7 @@ import {
   Calendar,
   Gauge,
   Eye,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   getFuelLogsByVehicle,
@@ -27,7 +39,10 @@ import {
   getAllVehicles,
   getAllDrivers,
   updateFuelLog,
-} from '../lib/supabaseQueries';
+} from '../lib/firebaseQueries';
+import { calculateFuelStats, buildVehicleBreakdown, calculateFuelAvailability, buildFuelTrendData, type VehicleFuelBreakdown } from '../lib/fuelStats';
+import { filterFuelLogs } from '../lib/fuelSearch';
+import { showDeleteConfirm, showErrorAlert, showSuccessAlert } from '../lib/sweetAlert';
 
 interface FuelLog {
   id: string;
@@ -78,9 +93,15 @@ export default function FuelTracking() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [stats, setStats] = useState<FuelStats | null>(null);
+  const [fleetStats, setFleetStats] = useState<FuelStats | null>(null);
+  const [vehicleBreakdown, setVehicleBreakdown] = useState<VehicleFuelBreakdown[]>([]);
+  const [fuelAvailability, setFuelAvailability] = useState<{ currentFuelAvailable: number; fuelLeft: number; consumptionRate: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedVehicleForDetail, setSelectedVehicleForDetail] = useState<Vehicle | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showPrimaryLedgerModal, setShowPrimaryLedgerModal] = useState(false);
+  const [showVehicleLogBookModal, setShowVehicleLogBookModal] = useState(false);
   
   // Filter states
   const [filterType, setFilterType] = useState<'all' | 'month' | 'range'>('all');
@@ -99,23 +120,53 @@ export default function FuelTracking() {
     refuel_date: new Date().toISOString().slice(0, 10),
   });
 
+  const refreshFleetOverview = async (currentVehicles: Vehicle[] = vehicles) => {
+    if (!currentVehicles.length) {
+      setFleetStats(null);
+      setVehicleBreakdown([]);
+      return;
+    }
+
+    try {
+      const results = await Promise.all(currentVehicles.map((vehicle) => getFuelLogsByVehicle(vehicle.id)));
+      const allLogs = results.flatMap((result) => (result.data || []) as FuelLog[]);
+      setFleetStats(calculateFuelStats(allLogs));
+      setVehicleBreakdown(buildVehicleBreakdown(allLogs, currentVehicles));
+    } catch (err) {
+      console.error('Error loading fleet fuel overview:', err);
+    }
+  };
+
+  const updateFuelDisplay = (logs: FuelLog[]) => {
+    calculateStats(logs);
+    const selectedVehicleData = vehicles.find((vehicle) => vehicle.id === selectedVehicle);
+    setFuelAvailability(calculateFuelAvailability(logs, selectedVehicleData?.mileage || 0));
+  };
+
   // Fetch vehicles and drivers on mount
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [vehiclesRes, driversRes] = await Promise.all([
-          getAllVehicles(),
-          getAllDrivers(),
-        ]);
+        setLoading(true);
+        const vehiclesRes = await getAllVehicles();
+        const driversRes = await getAllDrivers();
 
-        if (vehiclesRes.data) setVehicles(vehiclesRes.data);
-        if (driversRes.data) setDrivers(driversRes.data);
+        const vehiclesList = vehiclesRes.data || [];
+        const driversList = driversRes.data || [];
 
-        if (vehiclesRes.data && vehiclesRes.data.length > 0) {
-          setSelectedVehicle(vehiclesRes.data[0].id);
+        setVehicles(vehiclesList);
+        setDrivers(driversList);
+
+        if (vehiclesList.length > 0) {
+          setSelectedVehicle(vehiclesList[0].id);
+          await refreshFleetOverview(vehiclesList);
+        } else {
+          setError('No vehicles found. Please add vehicles first.');
         }
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load initial data';
         console.error('Error loading initial data:', err);
+        setError(errorMsg);
       } finally {
         setLoading(false);
       }
@@ -130,20 +181,33 @@ export default function FuelTracking() {
 
     const loadFuelLogs = async () => {
       try {
-        const { data, error: err } = await getFuelLogsByVehicle(selectedVehicle);
-        if (err) {
-          setError(err.message);
+        setLoading(true);
+        const result = await getFuelLogsByVehicle(selectedVehicle);
+        
+        if (result.error) {
+          console.error('Error loading fuel logs:', result.error);
+          setFuelLogs([]);
+          setStats(null);
+          setError(null);
           return;
         }
-        setFuelLogs(data || []);
-        calculateStats(data || []);
+
+        const logs = result.data || [];
+        setFuelLogs(logs);
+        updateFuelDisplay(logs);
+        setError(null);
       } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load fuel logs';
         console.error('Error loading fuel logs:', err);
+        setFuelLogs([]);
+        setStats(null);
+      } finally {
+        setLoading(false);
       }
     };
 
     loadFuelLogs();
-  }, [selectedVehicle]);
+  }, [selectedVehicle, vehicles]);
 
   const calculateStats = (logs: FuelLog[]) => {
     if (logs.length === 0) {
@@ -215,7 +279,7 @@ export default function FuelTracking() {
       totalLitres: parseFloat(totalLitres.toFixed(2)),
       totalCost: parseFloat(totalCost.toFixed(2)),
       avgCostPerLitre: parseFloat(avgCostPerLitre.toFixed(2)),
-      lastRefuel: logs[0] || null,
+      lastRefuel: sortedByDate[sortedByDate.length - 1] || null,
       avgKmPerLitre: parseFloat(avgKmPerLitre.toFixed(2)),
       bestKmPerLitre: parseFloat(bestKmPerLitre.toFixed(2)),
       worstKmPerLitre: parseFloat(worstKmPerLitre.toFixed(2)),
@@ -223,6 +287,13 @@ export default function FuelTracking() {
       anomalies: anomalies.slice(0, 3), // Show top 3 anomalies
     });
   };
+
+  const trendData = buildFuelTrendData(fuelLogs);
+  const fleetChartData = vehicleBreakdown.map((vehicle) => ({
+    name: vehicle.registrationNumber,
+    litres: vehicle.totalLitres,
+    cost: vehicle.totalCost,
+  }));
 
   const sortedLogs = [...fuelLogs]
     .sort((a, b) => {
@@ -242,20 +313,10 @@ export default function FuelTracking() {
         if (logDate < start || logDate > end) return false;
       }
 
-      // Search filtering
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const driver = drivers.find((d) => d.id === log.driver_id);
-        return (
-          log.station_name.toLowerCase().includes(term) ||
-          driver?.name.toLowerCase().includes(term) ||
-          log.cost.toString().includes(term) ||
-          log.litres.toString().includes(term)
-        );
-      }
-
       return true;
     });
+
+  const filteredLogs = filterFuelLogs(sortedLogs, searchTerm, drivers, vehicles);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,25 +332,29 @@ export default function FuelTracking() {
         driver_id: formData.driver_id || null,
         litres: parseFloat(formData.litres),
         cost: parseFloat(formData.cost),
-        station_name: formData.station_name,
-        odometer: formData.odometer ? parseInt(formData.odometer) : null,
+        station_name: formData.station_name || 'N/A',
+        odometer: formData.odometer ? parseInt(formData.odometer) : 0,
         receipt_url: formData.receipt_url || null,
-        refuel_date: new Date(formData.refuel_date).toISOString(),
+        refuel_date: formData.refuel_date,
+        created_at: new Date().toISOString(),
       };
 
       let result;
       if (editingId) {
         result = await updateFuelLog(editingId, fuelLogData);
+        if (result.error) throw new Error(result.error.message || 'Failed to update fuel log');
       } else {
         result = await createFuelLog(fuelLogData);
+        if (result.error) throw new Error(result.error.message || 'Failed to create fuel log');
       }
 
-      if (result.error) throw new Error(result.error.message);
-
       // Refresh the fuel logs
-      const { data } = await getFuelLogsByVehicle(selectedVehicle);
-      setFuelLogs(data || []);
-      calculateStats(data || []);
+      const refreshResult = await getFuelLogsByVehicle(selectedVehicle);
+      if (refreshResult.data) {
+        setFuelLogs(refreshResult.data);
+        updateFuelDisplay(refreshResult.data);
+      }
+      await refreshFleetOverview(vehicles);
 
       const message = editingId ? 'Fuel log updated successfully!' : 'Fuel log created successfully!';
       setSuccessMessage(message);
@@ -311,24 +376,39 @@ export default function FuelTracking() {
       setEditingId(null);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save fuel log');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to save fuel log';
+      setError(errorMsg);
+      showErrorAlert('Save failed', errorMsg);
       console.error('Error saving fuel log:', err);
     }
   };
 
   const handleDelete = async (logId: string) => {
-    if (!confirm('Are you sure you want to delete this fuel log?')) return;
+    const confirmResult = await showDeleteConfirm(
+      'Delete fuel log?',
+      'This fuel log will be permanently deleted. This action cannot be undone.'
+    );
+
+    if (!confirmResult.isConfirmed) {
+      setDeleteTargetId(null);
+      return;
+    }
 
     try {
       const result = await deleteFuelLog(logId);
-      if (result.error) throw new Error(result.error.message);
+      if (result.error) throw new Error(result.error.message || 'Failed to delete fuel log');
 
       const updatedLogs = fuelLogs.filter((log) => log.id !== logId);
       setFuelLogs(updatedLogs);
-      calculateStats(updatedLogs);
+      updateFuelDisplay(updatedLogs);
+      await refreshFleetOverview(vehicles);
+      setDeleteTargetId(null);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete fuel log');
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete fuel log';
+      setError(errorMsg);
+      showErrorAlert('Delete failed', errorMsg);
+      console.error('Error deleting fuel log:', err);
     }
   };
 
@@ -410,7 +490,7 @@ export default function FuelTracking() {
               <p className="text-orange-200 text-xs">Monitor consumption & efficiency</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               className="flex items-center gap-1 px-3 py-1 bg-white bg-opacity-15 text-white rounded-md hover:bg-opacity-25 transition-all font-medium text-xs backdrop-blur-sm border border-white border-opacity-20"
               title="Download report"
@@ -418,28 +498,221 @@ export default function FuelTracking() {
               📊
             </button>
             <button
-              onClick={() => {
-                setFormData({
-                  vehicle_id: selectedVehicle,
-                  driver_id: '',
-                  litres: '',
-                  cost: '',
-                  station_name: '',
-                  odometer: '',
-                  receipt_url: '',
-                  refuel_date: new Date().toISOString().slice(0, 10),
-                });
-                setEditingId(null);
-                setShowModal(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-1 bg-white text-orange-800 rounded-md hover:bg-orange-50 transition-all font-semibold text-xs shadow-md"
+              onClick={() => setShowPrimaryLedgerModal(true)}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-all font-semibold text-xs shadow-md"
             >
-              <Plus size={16} />
-              Log
+              <Plus size={14} />
+              Primary Ledger
+            </button>
+            <button
+              onClick={() => setShowPrimaryLedgerModal(true)}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-all font-semibold text-xs shadow-md"
+            >
+              <Plus size={14} />
+              Fuel Register
+            </button>
+            <button
+              onClick={() => setShowVehicleLogBookModal(true)}
+              className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-all font-semibold text-xs shadow-md"
+            >
+              <Plus size={14} />
+              Vehicle Log Book
             </button>
           </div>
         </div>
       </div>
+
+      {showPrimaryLedgerModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowPrimaryLedgerModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="primary-ledger-title"
+            className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h2 id="primary-ledger-title" className="text-sm font-semibold text-gray-900">Primary Ledger</h2>
+                <p className="text-xs text-gray-600">Record fuel top-up transactions</p>
+              </div>
+              <button
+                onClick={() => setShowPrimaryLedgerModal(false)}
+                className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close Primary Ledger"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Date of Top Up</label>
+                  <input type="date" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Proof of Payment (POP)</label>
+                  <input type="text" placeholder="POP reference" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Amount to Top Up</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">General Receipt Number</label>
+                  <input type="text" placeholder="Receipt number" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Vehicle Registration Number</label>
+                  <input type="text" placeholder="Registration number" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Fuel Gas Station</label>
+                  <input type="text" placeholder="Station name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Balance After Refill</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Driver&apos;s Name</label>
+                  <input type="text" placeholder="Driver name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Authorising Officer</label>
+                  <input type="text" placeholder="Officer name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Activity (Description)</label>
+                  <textarea rows={3} placeholder="Describe the top-up activity" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <button
+                  onClick={() => setShowPrimaryLedgerModal(false)}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPrimaryLedgerModal(false);
+                    showSuccessAlert('Primary Ledger', 'Fuel top-up entry saved successfully.');
+                  }}
+                  className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Save Entry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVehicleLogBookModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowVehicleLogBookModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vehicle-log-book-title"
+            className="w-full max-w-3xl rounded-xl border border-gray-200 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h2 id="vehicle-log-book-title" className="text-sm font-semibold text-gray-900">Vehicle Log Book</h2>
+                <p className="text-xs text-gray-600">Record vehicle journey details</p>
+              </div>
+              <button
+                onClick={() => setShowVehicleLogBookModal(false)}
+                className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close Vehicle Log Book"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Date</label>
+                  <input type="date" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Time</label>
+                  <input type="time" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Authorising Officer</label>
+                  <input type="text" placeholder="Officer name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Mileage Start Up</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Finishing Mileage</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Distance Covered</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Type of Fuel</label>
+                  <input type="text" placeholder="Fuel type" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">How Many Litres</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Refulants (Litres)</label>
+                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Driver Name</label>
+                  <input type="text" placeholder="Driver name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Details of the Journey (Description)</label>
+                  <textarea rows={3} placeholder="Describe the journey" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Time for Completing the Journey</label>
+                  <input type="time" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <button
+                  onClick={() => setShowVehicleLogBookModal(false)}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowVehicleLogBookModal(false);
+                    showSuccessAlert('Vehicle Log Book', 'Journey log entry saved successfully.');
+                  }}
+                  className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Save Entry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success Alert */}
       {successMessage && (
@@ -472,7 +745,7 @@ export default function FuelTracking() {
         <select
           value={selectedVehicle}
           onChange={(e) => setSelectedVehicle(e.target.value)}
-          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent font-medium"
+          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent font-medium text-gray-900"
         >
           {vehicles.map((vehicle) => (
             <option key={vehicle.id} value={vehicle.id}>
@@ -481,6 +754,67 @@ export default function FuelTracking() {
           ))}
         </select>
       </div>
+
+      {/* Fleet Overview */}
+      {fleetStats && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Fleet Fuel Overview</p>
+                <p className="text-xs text-gray-500">Across all tracked vehicles</p>
+              </div>
+              <div className="rounded-full bg-orange-100 p-2 text-orange-600">
+                <Fuel size={18} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-blue-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-blue-700">Total litres</p>
+                <p className="text-xl font-bold text-blue-900">{fleetStats.totalLitres.toFixed(2)}L</p>
+              </div>
+              <div className="rounded-lg bg-emerald-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-emerald-700">Total cost</p>
+                <p className="text-xl font-bold text-emerald-900">K{fleetStats.totalCost.toFixed(0)}</p>
+              </div>
+              <div className="rounded-lg bg-amber-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-amber-700">Avg efficiency</p>
+                <p className="text-xl font-bold text-amber-900">{fleetStats.avgKmPerLitre.toFixed(2)} km/L</p>
+              </div>
+              <div className="rounded-lg bg-purple-50 p-3">
+                <p className="text-xs uppercase tracking-wide text-purple-700">Distance</p>
+                <p className="text-xl font-bold text-purple-900">{fleetStats.totalKm.toLocaleString()} km</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Vehicle Performance</p>
+                <p className="text-xs text-gray-500">Top fuel consumers by vehicle</p>
+              </div>
+              <div className="rounded-full bg-gray-100 p-2 text-gray-600">
+                <Truck size={18} />
+              </div>
+            </div>
+            <div className="space-y-3">
+              {vehicleBreakdown.slice(0, 4).map((vehicle) => (
+                <div key={vehicle.vehicleId} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{vehicle.registrationNumber}</p>
+                    <p className="text-xs text-gray-500">{vehicle.make} {vehicle.model}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-gray-900">{vehicle.totalLitres.toFixed(1)}L</p>
+                    <p className="text-xs text-gray-500">{vehicle.refuelCount} refuels</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Statistics */}
       {stats && (
@@ -531,6 +865,36 @@ export default function FuelTracking() {
               </div>
             </div>
 
+            {/* Current Fuel Available Card */}
+            <div className="bg-gradient-to-br from-cyan-50 to-cyan-100/50 border border-cyan-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-400 to-cyan-500" />
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700 opacity-85">Current Fuel Available</p>
+                  <p className="text-2xl font-bold text-cyan-900 mt-2">{fuelAvailability?.currentFuelAvailable.toFixed(2) || '0.00'}L</p>
+                  <p className="text-xs text-cyan-600 mt-2 font-medium">Estimated from latest refill</p>
+                </div>
+                <div className="bg-cyan-100 p-2.5 rounded-lg group-hover:scale-105 transition-transform duration-300 flex-shrink-0">
+                  <Gauge className="w-5 h-5 text-cyan-600" />
+                </div>
+              </div>
+            </div>
+
+            {/* Fuel Left Card */}
+            <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 border border-indigo-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-400 to-indigo-500" />
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700 opacity-85">Fuel Left</p>
+                  <p className="text-2xl font-bold text-indigo-900 mt-2">{fuelAvailability?.fuelLeft.toFixed(2) || '0.00'}L</p>
+                  <p className="text-xs text-indigo-600 mt-2 font-medium">Approx. remaining balance</p>
+                </div>
+                <div className="bg-indigo-100 p-2.5 rounded-lg group-hover:scale-105 transition-transform duration-300 flex-shrink-0">
+                  <Fuel className="w-5 h-5 text-indigo-600" />
+                </div>
+              </div>
+            </div>
+
             {/* Best vs Worst Card */}
             <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-400 to-purple-500" />
@@ -569,6 +933,84 @@ export default function FuelTracking() {
         </>
       )}
 
+      {selectedVehicle && (
+        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Selected Vehicle Snapshot</p>
+              <p className="text-xs text-gray-500">Focused fuel view for the currently chosen vehicle</p>
+            </div>
+            <div className="rounded-full bg-blue-100 p-2 text-blue-600">
+              <Gauge size={18} />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Vehicle</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {vehicles.find((vehicle) => vehicle.id === selectedVehicle)?.registration_number || 'Selected vehicle'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Latest refuel</p>
+              <p className="text-sm font-semibold text-gray-900">{stats?.lastRefuel ? new Date(stats.lastRefuel.refuel_date).toLocaleDateString() : 'No data'}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Consumption trend</p>
+              <p className="text-sm font-semibold text-gray-900">{stats?.avgKmPerLitre ? `${stats.avgKmPerLitre.toFixed(2)} km/L` : 'N/A'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Fuel Trend</p>
+              <p className="text-xs text-gray-500">Recent refuels for the selected vehicle</p>
+            </div>
+            <div className="rounded-full bg-orange-100 p-2 text-orange-600">
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="litres" stroke="#EA7B7B" strokeWidth={3} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Fleet Comparison</p>
+              <p className="text-xs text-gray-500">Fuel usage across vehicles</p>
+            </div>
+            <div className="rounded-full bg-blue-100 p-2 text-blue-600">
+              <Truck size={18} />
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={fleetChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="litres" fill="#EA7B7B" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
       {/* Table Header with Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-gray-200 dark:border-gray-700 space-y-4">
@@ -576,7 +1018,7 @@ export default function FuelTracking() {
             <div className="flex items-center gap-2">
               <Filter className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                Showing <span className="text-[#EA7B7B]">{sortedLogs.length}</span> of{' '}
+                Showing <span className="text-[#EA7B7B]">{filteredLogs.length}</span> of{' '}
                 <span className="text-gray-700">{fuelLogs.length}</span> logs
               </span>
             </div>
@@ -593,10 +1035,10 @@ export default function FuelTracking() {
           <div>
             <input
               type="text"
-              placeholder="🔍 Search by station, driver, cost, or litres..."
+              placeholder="🔍 Search by station, driver, vehicle, cost, litres, date or odometer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent text-sm font-medium"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent text-sm font-medium text-gray-700 placeholder:text-gray-500"
             />
           </div>
 
@@ -641,7 +1083,7 @@ export default function FuelTracking() {
                   onChange={(e) => setStartDate(e.target.value)}
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#EA7B7B] font-medium"
                 />
-                <span className="text-gray-400 text-sm font-medium">to</span>
+                <span className="text-gray-600 text-sm font-medium">to</span>
                 <input
                   type="date"
                   value={endDate}
@@ -656,7 +1098,7 @@ export default function FuelTracking() {
 
       {/* Fuel Logs Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        {sortedLogs.length > 0 ? (
+        {filteredLogs.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 dark:from-gray-700 to-gray-100 dark:to-gray-600 border-b border-gray-200 dark:border-gray-700">
@@ -673,7 +1115,7 @@ export default function FuelTracking() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {sortedLogs.map((log, idx) => {
+                {filteredLogs.map((log, idx) => {
                   const driver = drivers.find((d) => d.id === log.driver_id);
                   const vehicle = vehicles.find((v) => v.id === log.vehicle_id);
                   const costPerLitre = log.litres > 0 ? log.cost / log.litres : 0;
@@ -682,8 +1124,8 @@ export default function FuelTracking() {
                   let kml = '-';
                   let efficiencyStatus = '';
                   let efficiencyBg = '';
-                  if (idx > 0 && log.odometer && sortedLogs[idx - 1].odometer) {
-                    const kmDriven = log.odometer - sortedLogs[idx - 1].odometer;
+                  if (idx > 0 && log.odometer && filteredLogs[idx - 1].odometer) {
+                    const kmDriven = log.odometer - filteredLogs[idx - 1].odometer;
                     const calculatedKml = kmDriven / log.litres;
                     if (calculatedKml > 0 && calculatedKml < 100) {
                       kml = calculatedKml.toFixed(2);
@@ -725,35 +1167,25 @@ export default function FuelTracking() {
                       <td className="px-6 py-4 text-sm text-gray-700 font-medium">
                         {log.odometer ? `${log.odometer.toLocaleString()}km` : '-'}
                       </td>
-                      <td className={`px-6 py-4 text-sm font-bold ${efficiencyStatus} ${efficiencyBg ? efficiencyBg + ' rounded' : ''}`}>
+                      <td className={`px-6 py-4 text-sm font-bold text-gray-700 ${efficiencyStatus} ${efficiencyBg ? efficiencyBg + ' rounded' : ''}`}>
                         {kml !== '-' ? `${kml} km/L` : '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700 font-medium">{driver?.name || '-'}</td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => {
-                              if (vehicle) {
-                                setSelectedVehicleForDetail(vehicle);
-                                setDetailModalOpen(true);
-                              }
-                            }}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors duration-150 font-medium"
-                            title="View Vehicle Details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleEdit(log)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-150 font-medium"
-                            title="Edit"
+                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors duration-150"
+                            title="Edit fuel log"
+                            aria-label="Edit"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(log.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-150 font-medium"
-                            title="Delete"
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors duration-150"
+                            title="Delete fuel log"
+                            aria-label="Delete"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
