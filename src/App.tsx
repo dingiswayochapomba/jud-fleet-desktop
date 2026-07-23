@@ -45,6 +45,8 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const lastAuthUidRef = useRef<string | null>(null);
 
+  const currentUserId = user?.uid || user?.id || userProfile?.id || null;
+
   // Fetch user profile from database
   const fetchUserProfile = useCallback(async (userId: string, email?: string) => {
     try {
@@ -229,7 +231,7 @@ function App() {
           userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
           userRole={getRoleKey(userProfile?.role)}
           activeTabLabel={tabNames[activeTab] || 'Dashboard'}
-          userId={user?.id}
+          userId={currentUserId}
           onLogout={handleLogout}
           onSettingsClick={() => setActiveTab('settings')}
           onTabChange={(tab) => setActiveTab(tab)}
@@ -257,7 +259,7 @@ function App() {
           {activeTab === 'insurance' && <InsuranceManagement />}
           {activeTab === 'disposal' && <DisposalTracking />}
           {activeTab === 'reports' && <ReportsPage />}
-          {activeTab === 'notifications' && user?.id && <NotificationsPage userId={user.id} />}
+          {activeTab === 'notifications' && currentUserId && <NotificationsPage userId={currentUserId} />}
           {activeTab === 'settings' && user && (
             <SettingsPage 
               userProfile={userProfile}

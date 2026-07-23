@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Users, TrendingUp, AlertTriangle, CheckCircle, Gauge, Clock, Calendar, Shield, Activity, Zap, BellRing, BadgeCheck, PhoneCall, CalendarClock, ShieldCheck, Truck } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Users, TrendingUp, AlertTriangle, CheckCircle, Gauge, Clock, Calendar, Shield, Activity, Zap, BellRing, BadgeCheck, PhoneCall, CalendarClock, ShieldCheck, Truck, MoreHorizontal } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { createDriver, deleteDriver, getAllDrivers, testConnection, updateDriver } from '../lib/firebaseQueries';
 
@@ -112,6 +112,7 @@ export default function DriversManagement() {
   const [sortBy, setSortBy] = useState<'name' | 'license_number' | 'date_of_appointment' | 'status'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [formData, setFormData] = useState<DriverFormData>({
     name: '',
     license_number: '',
@@ -876,8 +877,19 @@ export default function DriversManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredDrivers.map((driver, idx) => (
-                  <tr key={driver.id} className={`border-b border-gray-100 hover:bg-blue-50 transition-all ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                {filteredDrivers.map((driver, idx) => {
+                  const expiryBucket = getDriverExpiryBucket(driver);
+                  const isFlagged = expiryBucket !== 'valid';
+                  const rowHighlightClass = isFlagged
+                    ? expiryBucket === 'expired'
+                      ? 'bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 shadow-[inset_4px_0_0_0_#ef4444] border-l-4 border-red-400'
+                      : 'bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 shadow-[inset_4px_0_0_0_#f59e0b] border-l-4 border-amber-400'
+                    : idx % 2 === 0
+                      ? 'bg-white'
+                      : 'bg-slate-50';
+
+                  return (
+                  <tr key={driver.id} className={`border-b border-gray-200 hover:bg-blue-50 transition-all ${rowHighlightClass}`}>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <img src={getDriverAvatarUrl(driver.name)} alt={driver.name} className="h-9 w-9 rounded-full object-cover border border-gray-200 shadow-sm" />
@@ -929,32 +941,53 @@ export default function DriversManagement() {
                       </span>
                     </td>
                     <td className="px-3 py-2">
-                      <div className="flex items-center justify-center gap-0.5">
-                        <button
-                          onClick={() => setViewingId(driver.id)}
-                          className="p-1.5 hover:bg-blue-100 rounded-lg text-blue-600 transition-all font-bold hover:shadow-md"
-                          title="View"
-                        >
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleEditDriver(driver)}
-                          className="p-1.5 hover:bg-emerald-100 rounded-lg text-emerald-600 transition-all font-bold hover:shadow-md"
-                          title="Edit"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(driver.id)}
-                          className="p-1 hover:bg-red-50 rounded text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                      <div className="flex items-center justify-center">
+                        <div className="relative">
+                          <button
+                            onClick={() => setOpenActionMenuId(openActionMenuId === driver.id ? null : driver.id)}
+                            className="p-1.5 hover:bg-slate-100 rounded-full text-slate-600 transition-all font-bold hover:shadow-sm border border-transparent hover:border-slate-200"
+                            title="Actions"
+                          >
+                            <MoreHorizontal size={15} />
+                          </button>
+
+                          {openActionMenuId === driver.id && (
+                            <div className="absolute right-0 top-8 z-10 w-36 rounded-lg border border-gray-200 bg-white shadow-xl overflow-hidden">
+                              <button
+                                onClick={() => {
+                                  setViewingId(driver.id);
+                                  setOpenActionMenuId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                              >
+                                <Eye size={14} /> View
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleEditDriver(driver);
+                                  setOpenActionMenuId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
+                              >
+                                <Edit2 size={14} /> Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setDeleteConfirm(driver.id);
+                                  setOpenActionMenuId(null);
+                                }}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-red-50 hover:text-red-700"
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
