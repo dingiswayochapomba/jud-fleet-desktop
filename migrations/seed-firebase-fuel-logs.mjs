@@ -43,80 +43,67 @@ function daysAgo(days) {
 }
 
 async function seedFuelLogs() {
-  console.log('⛽ Seeding fuel logs to Firestore...\n');
-  
-  // Fetch all vehicles first
+  console.log('⛽ Seeding richer fuel logs to Firestore...\n');
+
   const vehicleCol = db.collection('vehicles');
   const vehicleSnap = await vehicleCol.get();
-  
+
   if (vehicleSnap.empty) {
     console.warn('⚠️  No vehicles found in database. Please run seed-firebase-vehicles.mjs first.\n');
     process.exit(0);
   }
-  
+
   const vehicles = [];
   vehicleSnap.forEach((doc) => {
     vehicles.push({ id: doc.id, ...doc.data() });
   });
-  
-  console.log(`📍 Found ${vehicles.length} vehicles. Creating fuel logs...\n`);
-  
-  // Fetch all drivers for assignment
+
   const driversCol = db.collection('drivers');
   const driversSnap = await driversCol.limit(100).get();
   const drivers = [];
   driversSnap.forEach((doc) => {
     drivers.push({ id: doc.id, ...doc.data() });
   });
-  
+
   if (drivers.length === 0) {
     console.warn('⚠️  No drivers found in database. Please run seed-firebase-drivers.mjs first.\n');
     process.exit(0);
   }
-  
-  console.log(`🚗 Found ${drivers.length} drivers. Assigning to fuel logs...\n`);
-  
-  // Generate fuel logs for each vehicle (3-5 logs per vehicle in past 90 days)
+
   const fuelLogs = [];
-  let logId = 1;
-  
+  const stationOptions = ['Puma Energy', 'Total', 'Caltex', 'Shell', 'Sonangol'];
+  const noteOptions = ['Routine refuel', 'Weekly replenishment', 'Emergency top-up', 'Fleet operation', 'After long-distance run'];
+
   for (const vehicle of vehicles) {
-    // Skip disposed vehicles
     if (vehicle.status === 'disposed') continue;
-    
-    const logsPerVehicle = Math.floor(Math.random() * 3) + 3; // 3-5 logs
-    const baseCost = vehicle.fuel_type === 'diesel' ? 1.15 : 0.95; // Price per litre
+
+    const logsPerVehicle = 4 + Math.floor(Math.random() * 3);
+    const baseCost = vehicle.fuel_type === 'diesel' ? 1.25 : 0.98;
     let currentOdometer = vehicle.mileage || 10000;
-    
-    // Create array of dates for this vehicle's logs
-    const logDates = [];
-    for (let i = 0; i < logsPerVehicle; i++) {
-      const daysInPast = Math.floor(Math.random() * 85) + 5; // Past 5-90 days
-      logDates.push(daysAgo(daysInPast));
-    }
-    logDates.sort(); // Sort chronologically
-    
-    for (let i = 0; i < logsPerVehicle; i++) {
-      const litres = Math.floor(Math.random() * 40) + 15; // 15-55 litres
-      const cost = parseFloat((litres * baseCost + (Math.random() * 5 - 2.5)).toFixed(2));
-      const kmDriven = Math.floor(Math.random() * 300) + 100; // 100-400 km per log
-      
-      // Random driver assignment (some logs may be without driver)
+    const logDates = Array.from({ length: logsPerVehicle }, (_, index) => daysAgo(10 + index * 12 + Math.floor(Math.random() * 6)));
+    logDates.sort();
+
+    for (let i = 0; i < logsPerVehicle; i += 1) {
+      const litres = 18 + Math.floor(Math.random() * 22);
+      const kmDriven = 180 + Math.floor(Math.random() * 220);
+      const cost = parseFloat((litres * baseCost + Math.random() * 6).toFixed(2));
       const driverId = Math.random() > 0.2 ? drivers[Math.floor(Math.random() * drivers.length)].id : null;
-      
+      const stationName = stationOptions[Math.floor(Math.random() * stationOptions.length)];
+
       fuelLogs.push({
         vehicle_id: vehicle.id,
         driver_id: driverId,
         litres,
         cost,
-        station_name: ['Puma Energy', 'Total', 'Caltex', 'Sonangol', 'Naftco'][Math.floor(Math.random() * 5)],
+        station_name: stationName,
         odometer: currentOdometer + kmDriven,
         refuel_date: logDates[i],
         receipt_url: null,
+        notes: noteOptions[Math.floor(Math.random() * noteOptions.length)],
+        fuel_type: vehicle.fuel_type || 'diesel',
       });
-      
+
       currentOdometer += kmDriven;
-      logId++;
     }
   }
   

@@ -36,20 +36,20 @@ function initFirebase() {
 const db = initFirebase();
 
 const drivers = [
-  { name: 'John Banda', license_number: 'DL-001-2024', license_expiry: '2026-06-15', date_of_birth: '1985-03-15', phone: '+265991234567', status: 'active' },
-  { name: 'Grace Mwale', license_number: 'DL-002-2024', license_expiry: '2025-12-20', date_of_birth: '1990-05-20', phone: '+265992234567', status: 'active' },
-  { name: 'Samuel Chikwanda', license_number: 'DL-003-2024', license_expiry: '2026-09-10', date_of_birth: '1982-07-22', phone: '+265993234567', status: 'active' },
-  { name: 'Martha Phiri', license_number: 'DL-004-2024', license_expiry: '2026-03-05', date_of_birth: '1988-09-18', phone: '+265994234567', status: 'active' },
-  { name: 'Christopher Nkhata', license_number: 'DL-005-2024', license_expiry: '2026-11-30', date_of_birth: '1992-02-14', phone: '+265995234567', status: 'active' },
-  { name: 'Robert Kapito', license_number: 'DL-006-2024', license_expiry: '2026-05-20', date_of_birth: '1960-11-05', phone: '+265996234567', status: 'retired' },
-  { name: 'Susan Chilembwe', license_number: 'DL-007-2024', license_expiry: '2025-08-15', date_of_birth: '1965-04-12', phone: '+265997234567', status: 'retired' },
-  { name: 'David Mlambiri', license_number: 'DL-008-2024', license_expiry: '2026-07-25', date_of_birth: '1980-01-08', phone: '+265998234567', status: 'retired' },
-  { name: 'Thomas Kachali', license_number: 'DL-009-2024', license_expiry: '2025-04-10', date_of_birth: '1978-06-20', phone: '+265999234567', status: 'suspended' },
-  { name: 'Lucy Chirwa', license_number: 'DL-010-2024', license_expiry: '2024-12-01', date_of_birth: '1975-09-15', phone: '+265991234568', status: 'suspended' },
-  { name: 'James Mwansambo', license_number: 'DL-011-2024', license_expiry: '2026-02-28', date_of_birth: '1987-10-05', phone: '+265992234568', status: 'active' },
-  { name: 'Elizabeth Phimbi', license_number: 'DL-012-2024', license_expiry: '2025-10-15', date_of_birth: '1993-12-01', phone: '+265993234568', status: 'active' },
-  { name: 'Peter Mapanje', license_number: 'DL-013-2024', license_expiry: '2026-08-22', date_of_birth: '1981-05-20', phone: '+265994234568', status: 'active' },
-  { name: 'Victoria Kumwenda', license_number: 'DL-014-2024', license_expiry: '2026-04-10', date_of_birth: '1989-03-10', phone: '+265995234568', status: 'active' },
+  { name: 'John Banda', license_number: 'DL-001-2024', license_expiry: '2026-06-15', date_of_birth: '1985-03-15', date_of_appointment: '2021-08-01', license_class: 'CE', phone: '+265991234567', status: 'active' },
+  { name: 'Grace Mwale', license_number: 'DL-002-2024', license_expiry: '2025-12-20', date_of_birth: '1990-05-20', date_of_appointment: '2022-01-12', license_class: 'C', phone: '+265992234567', status: 'active' },
+  { name: 'Samuel Chikwanda', license_number: 'DL-003-2024', license_expiry: '2026-09-10', date_of_birth: '1982-07-22', date_of_appointment: '2019-03-03', license_class: 'B', phone: '+265993234567', status: 'active' },
+  { name: 'Martha Phiri', license_number: 'DL-004-2024', license_expiry: '2026-03-05', date_of_birth: '1988-09-18', date_of_appointment: '2023-11-15', license_class: 'C', phone: '+265994234567', status: 'active' },
+  { name: 'Christopher Nkhata', license_number: 'DL-005-2024', license_expiry: '2026-11-30', date_of_birth: '1992-02-14', date_of_appointment: '2020-06-08', license_class: 'CE', phone: '+265995234567', status: 'active' },
+  { name: 'Robert Kapito', license_number: 'DL-006-2024', license_expiry: '2026-05-20', date_of_birth: '1960-11-05', date_of_appointment: '2016-04-20', license_class: 'B', phone: '+265996234567', status: 'inactive' },
+  { name: 'Susan Chilembwe', license_number: 'DL-007-2024', license_expiry: '2025-08-15', date_of_birth: '1965-04-12', date_of_appointment: '2018-09-10', license_class: 'C', phone: '+265997234567', status: 'inactive' },
+  { name: 'David Mlambiri', license_number: 'DL-008-2024', license_expiry: '2026-07-25', date_of_birth: '1980-01-08', date_of_appointment: '2021-02-14', license_class: 'B', phone: '+265998234567', status: 'inactive' },
+  { name: 'Thomas Kachali', license_number: 'DL-009-2024', license_expiry: '2025-04-10', date_of_birth: '1978-06-20', date_of_appointment: '2017-12-05', license_class: 'CE', phone: '+265999234567', status: 'suspended' },
+  { name: 'Lucy Chirwa', license_number: 'DL-010-2024', license_expiry: '2024-12-01', date_of_birth: '1975-09-15', date_of_appointment: '2015-10-01', license_class: 'C', phone: '+265991234568', status: 'suspended' },
+  { name: 'James Mwansambo', license_number: 'DL-011-2024', license_expiry: '2026-02-28', date_of_birth: '1987-10-05', date_of_appointment: '2022-07-09', license_class: 'B', phone: '+265992234568', status: 'active' },
+  { name: 'Elizabeth Phimbi', license_number: 'DL-012-2024', license_expiry: '2025-10-15', date_of_birth: '1993-12-01', date_of_appointment: '2024-01-16', license_class: 'CE', phone: '+265993234568', status: 'active' },
+  { name: 'Peter Mapanje', license_number: 'DL-013-2024', license_expiry: '2026-08-22', date_of_birth: '1981-05-20', date_of_appointment: '2020-10-11', license_class: 'C', phone: '+265994234568', status: 'active' },
+  { name: 'Victoria Kumwenda', license_number: 'DL-014-2024', license_expiry: '2026-04-10', date_of_birth: '1989-03-10', date_of_appointment: '2023-05-29', license_class: 'B', phone: '+265995234568', status: 'active' },
 ];
 
 async function seedDrivers() {

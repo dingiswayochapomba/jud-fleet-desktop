@@ -16,6 +16,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import appLogo from '../assets/images/app-logo.png';
+import { canAccessUsersPage } from '../lib/access';
 
 interface SidebarProps {
   activeTab: string;
@@ -27,13 +28,13 @@ interface SidebarProps {
   isLoggingOut: boolean;
 }
 
-const menuItems = [
+const baseMenuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'vehicles', label: 'Vehicles', icon: Truck },
   { id: 'drivers', label: 'Drivers', icon: Users },
   { id: 'users', label: 'Users', icon: Users2 },
   { id: 'fuel', label: 'Fuel Tracking', icon: Zap },
-  { id: 'fuel_analytics', label: 'Fuel Analytics', icon: TrendingUp },
+  { id: 'fuel_analytics', label: 'Analytics', icon: TrendingUp },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench },
   { id: 'insurance', label: 'Insurance', icon: Shield },
   { id: 'disposal', label: 'Disposal', icon: Trash2 },
@@ -46,6 +47,7 @@ export default function Sidebar({
   onLogout,
   onSidebarToggle,
   isLoggingOut,
+  userRole,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(() => {
     const saved = localStorage.getItem('sidebarOpen');
@@ -110,7 +112,7 @@ export default function Sidebar({
 
         {/* Menu Items */}
         <nav className="flex-1 px-2 py-4 overflow-y-auto">
-          {menuItems.map((item, index) => {
+          {baseMenuItems.filter((item) => item.id !== 'users' || canAccessUsersPage(userRole)).map((item, index) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 
@@ -130,7 +132,7 @@ export default function Sidebar({
                   <Icon size={18} className="flex-shrink-0" />
                   {isOpen && <span className="text-sm">{item.label}</span>}
                 </button>
-                {index < menuItems.length - 1 && (
+                {index < baseMenuItems.length - 1 && (
                   <div className="my-2 border-t border-gray-300 dark:border-gray-700" />
                 )}
               </div>

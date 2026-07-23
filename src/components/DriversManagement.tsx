@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Users, TrendingUp, AlertTriangle, CheckCircle, Gauge, Clock, Calendar, Shield, Activity, Zap } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Users, TrendingUp, AlertTriangle, CheckCircle, Gauge, Clock, Calendar, Shield, Activity, Zap, BellRing, BadgeCheck, PhoneCall, CalendarClock, ShieldCheck, Truck } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { getAllDrivers, testConnection } from '../lib/firebaseQueries';
+import { createDriver, deleteDriver, getAllDrivers, testConnection, updateDriver } from '../lib/firebaseQueries';
 
+type DriverStatus = 'active' | 'inactive' | 'suspended';
 interface Driver {
   id: string;
   name: string;
   license_number: string;
   phone: string;
   license_expiry: string;
-  status: 'active' | 'retired' | 'suspended';
+  status: DriverStatus;
   date_of_birth: string;
+  date_of_appointment: string;
+  license_class: string;
   created_at: string;
 }
 
@@ -19,15 +22,81 @@ interface DriverFormData {
   license_number: string;
   phone: string;
   license_expiry: string;
-  status: 'active' | 'retired' | 'suspended';
+  status: DriverStatus | 'retired';
   date_of_birth: string;
+  date_of_appointment: string;
+  license_class: string;
 }
 
 const statusColors: Record<string, { badge: string; bg: string; text: string; icon: string }> = {
   active: { badge: 'bg-emerald-100 text-emerald-800', bg: 'from-emerald-50 to-green-50', text: 'text-emerald-600', icon: 'emerald' },
-  retired: { badge: 'bg-gray-100 text-gray-800', bg: 'from-gray-50 to-slate-50', text: 'text-gray-600', icon: 'gray' },
+  inactive: { badge: 'bg-gray-100 text-gray-800', bg: 'from-gray-50 to-slate-50', text: 'text-gray-600', icon: 'gray' },
   suspended: { badge: 'bg-red-100 text-red-800', bg: 'from-red-50 to-rose-50', text: 'text-red-600', icon: 'red' },
 };
+
+const stockDriverImages = [
+  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80',
+  'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
+  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=160&q=80',
+  'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80',
+  'https://images.unsplash.com/photo-1519345182560-3f2917c472ef?auto=format&fit=crop&w=160&q=80',
+  'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=160&q=80',
+];
+
+function getDriverAvatarUrl(name: string) {
+  const seed = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return stockDriverImages[seed % stockDriverImages.length];
+}
+
+function getLicenseExpiryState(driver: Driver) {
+  if (!driver.license_expiry) {
+    return { label: 'No expiry', tone: 'gray' as const, icon: CalendarClock, daysLeft: null };
+  }
+
+  const expiryDate = new Date(driver.license_expiry);
+  const today = new Date();
+  const daysLeft = Math.floor((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysLeft < 0) {
+    return { label: 'Expired', tone: 'red' as const, icon: AlertTriangle, daysLeft };
+  }
+  if (daysLeft <= 15) {
+    return { label: `${daysLeft}d left`, tone: 'red' as const, icon: AlertTriangle, daysLeft };
+  }
+  if (daysLeft <= 30) {
+    return { label: `${daysLeft}d left`, tone: 'amber' as const, icon: BellRing, daysLeft };
+  }
+  return { label: 'Valid', tone: 'green' as const, icon: ShieldCheck, daysLeft };
+}
+
+function getDriverExpiryBucket(driver: Driver): 'expired' | 'soon' | 'valid' {
+  const expiryState = getLicenseExpiryState(driver);
+  if (expiryState.tone === 'red') return 'expired';
+  if (expiryState.tone === 'amber') return 'soon';
+  return 'valid';
+}
+
+function normalizeDriverStatus(status?: string): DriverStatus {
+  const normalized = (status || '').toString().trim().toLowerCase();
+  if (normalized === 'retired' || normalized === 'inactive') return 'inactive';
+  if (normalized === 'suspended') return 'suspended';
+  return 'active';
+}
+
+function normalizeDriver(record: any): Driver {
+  return {
+    id: record?.id || '',
+    name: record?.name || 'Unnamed Driver',
+    license_number: record?.license_number || '',
+    phone: record?.phone || '',
+    license_expiry: record?.license_expiry || '',
+    status: normalizeDriverStatus(record?.status),
+    date_of_birth: record?.date_of_birth || '',
+    date_of_appointment: record?.date_of_appointment || '',
+    license_class: record?.license_class || '',
+    created_at: record?.created_at || new Date().toISOString(),
+  };
+}
 
 export default function DriversManagement() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -38,8 +107,9 @@ export default function DriversManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [expiryFilter, setExpiryFilter] = useState<'all' | 'expired' | 'soon' | 'valid'>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'name' | 'license_number' | 'status'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'license_number' | 'date_of_appointment' | 'status'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [formData, setFormData] = useState<DriverFormData>({
@@ -49,72 +119,37 @@ export default function DriversManagement() {
     license_expiry: '',
     status: 'active',
     date_of_birth: new Date().toISOString().split('T')[0],
+    date_of_appointment: '',
+    license_class: '',
   });
 
-  // Load drivers from database
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadDrivers = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // First test connection
-        console.log('🔍 Testing connection to Firebase...');
-        const connTest = await testConnection();
-        if (!isMounted) return;
-        
-        if (!connTest.success) {
-          console.error('❌ Connection test failed:', connTest.error);
-          setError(`Connection error: ${connTest.error?.message || 'Unable to connect to database'}`);
-          setLoading(false);
-          return;
-        }
-        
-        console.log('✅ Connection successful, fetching drivers...');
-        const { data, error } = await getAllDrivers();
-        if (!isMounted) return;
-        
-        if (error) {
-          console.error('❌ Driver loading error:', error);
-          const errorMsg = error?.message || error?.error_description || error?.details || JSON.stringify(error) || 'Failed to load drivers';
-          setError(`Database error: ${errorMsg}`);
-          // Use mock data as fallback for debugging
-          const mockDrivers: Driver[] = [
-            {
-              id: '1',
-              name: 'John Banda',
-              license_number: 'DL001',
-              phone: '+265999123456',
-              status: 'active',
-              license_expiry: '2026-12-31',
-              date_of_birth: '1985-05-15',
-              created_at: new Date().toISOString(),
-            },
-          ];
-          console.log('⚠️ Using mock data as fallback');
-          setDrivers(mockDrivers);
-          return;
-        }
-        console.log(`✅ Loaded ${data?.length || 0} drivers from database`);
-        setDrivers(data || []);
-      } catch (err: any) {
-        if (!isMounted) return;
-        console.error('❌ Driver loading exception:', err);
-        setError(`Error: ${err?.message || String(err) || 'Failed to load drivers'}`);
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+  const loadDrivers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const connTest = await testConnection();
+      if (!connTest.success) {
+        throw new Error(connTest.error?.message || 'Unable to connect to database');
       }
-    };
 
-    loadDrivers();
-    
-    return () => {
-      isMounted = false;
-    };
+      const { data, error } = await getAllDrivers();
+      if (error) {
+        throw new Error(error?.message || error?.error_description || error?.details || 'Failed to load drivers');
+      }
+
+      setDrivers((data || []).map(normalizeDriver));
+    } catch (err: any) {
+      console.error('❌ Driver loading exception:', err);
+      setError(`Error: ${err?.message || 'Failed to load drivers'}`);
+      setDrivers([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadDrivers();
+  }, [loadDrivers]);
 
   const handleAddDriver = () => {
     setFormData({
@@ -124,6 +159,8 @@ export default function DriversManagement() {
       license_expiry: '',
       status: 'active',
       date_of_birth: new Date().toISOString().split('T')[0],
+      date_of_appointment: '',
+      license_class: '',
     });
     setEditingId(null);
     setShowForm(true);
@@ -136,7 +173,9 @@ export default function DriversManagement() {
       phone: driver.phone,
       license_expiry: driver.license_expiry,
       status: driver.status,
-      date_of_birth: driver.date_of_birth,
+      date_of_birth: driver.date_of_birth || '',
+      date_of_appointment: driver.date_of_appointment || '',
+      license_class: driver.license_class || '',
     });
     setEditingId(driver.id);
     setShowForm(true);
@@ -159,29 +198,26 @@ export default function DriversManagement() {
     }
 
     try {
+      const payload = {
+        ...formData,
+        name: formData.name.trim(),
+        license_number: formData.license_number.trim(),
+        phone: formData.phone.trim(),
+      };
+
       if (editingId) {
-        // Update existing driver
-        setDrivers(drivers.map(d => 
-          d.id === editingId 
-            ? { ...d, ...formData }
-            : d
-        ));
-        setSuccess(`Driver ${formData.name} updated successfully`);
+        const { data, error } = await updateDriver(editingId, payload);
+        if (error) throw error;
+        await loadDrivers();
+        setSuccess(`Driver ${payload.name} updated successfully`);
       } else {
-        // Create new driver
-        const newDriver: Driver = {
-          id: Date.now().toString(),
-          ...formData,
-          created_at: new Date().toISOString(),
-        };
-        setDrivers([...drivers, newDriver]);
-        setSuccess(`New driver ${formData.name} added successfully`);
+        const { data, error } = await createDriver(payload);
+        if (error) throw error;
+        await loadDrivers();
+        setSuccess(`New driver ${payload.name} added successfully`);
       }
-      
-      // Auto-clear form
+
       setShowForm(false);
-      
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError('Failed to save driver: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -192,7 +228,9 @@ export default function DriversManagement() {
   const handleDeleteDriver = async (id: string) => {
     try {
       const deletedDriver = drivers.find(d => d.id === id);
-      setDrivers(drivers.filter(d => d.id !== id));
+      const { error } = await deleteDriver(id);
+      if (error) throw error;
+      await loadDrivers();
       setDeleteConfirm(null);
       setSuccess(`Driver ${deletedDriver?.name} deleted successfully`);
       setTimeout(() => setSuccess(null), 3000);
@@ -202,14 +240,17 @@ export default function DriversManagement() {
     }
   };
 
-  const filteredDrivers = (filterStatus === 'all'
-    ? drivers
-    : drivers.filter(d => d.status === filterStatus)
-  ).filter(d =>
-    d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.license_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.phone.includes(searchTerm)
-  ).sort((a, b) => {
+  const filteredDrivers = drivers
+    .filter((driver) => {
+      const matchesStatus = filterStatus === 'all' || driver.status === filterStatus;
+      const matchesExpiry = expiryFilter === 'all' || getDriverExpiryBucket(driver) === expiryFilter;
+      const matchesSearch = !searchTerm || [driver.name, driver.license_number, driver.phone, driver.license_class]
+        .join(' ')
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      return matchesStatus && matchesExpiry && matchesSearch;
+    })
+    .sort((a, b) => {
     let compareValue = 0;
     switch (sortBy) {
       case 'license_number':
@@ -218,6 +259,9 @@ export default function DriversManagement() {
       case 'status':
         compareValue = a.status.localeCompare(b.status);
         break;
+      case 'date_of_appointment':
+        compareValue = a.date_of_appointment.localeCompare(b.date_of_appointment);
+        break;
       default:
         compareValue = a.name.localeCompare(b.name);
     }
@@ -225,6 +269,7 @@ export default function DriversManagement() {
   });
 
   const viewingDriver = drivers.find(d => d.id === viewingId);
+  const priorityExpiryDrivers = drivers.filter((driver) => getLicenseExpiryState(driver).tone !== 'green').slice(0, 4);
 
   if (loading) {
     return (
@@ -287,6 +332,44 @@ export default function DriversManagement() {
         </div>
       )}
 
+      {/* License Expiry Notifications */}
+      {priorityExpiryDrivers.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <BellRing size={18} className="text-amber-600" />
+              <div>
+                <h3 className="text-sm font-semibold text-amber-900">License expiry notifications</h3>
+                <p className="text-xs text-amber-700">Live alerts from the database for drivers needing attention</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+              {priorityExpiryDrivers.length} active
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {priorityExpiryDrivers.map((driver) => {
+              const expiryState = getLicenseExpiryState(driver);
+              const ExpiryIcon = expiryState.icon;
+              return (
+                <div key={driver.id} className="flex items-center justify-between rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <ExpiryIcon size={16} className={expiryState.tone === 'red' ? 'text-red-600' : 'text-amber-600'} />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{driver.name}</p>
+                      <p className="text-xs text-gray-600">{driver.license_number || 'No license number'}</p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${expiryState.tone === 'red' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {expiryState.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* KPI Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Drivers */}
@@ -297,6 +380,7 @@ export default function DriversManagement() {
             <div className="flex-1">
               <p className="text-blue-700 text-xs font-semibold uppercase tracking-wide mb-0.5 opacity-85 leading-tight">Total Drivers</p>
               <p className="text-blue-900 text-xl font-bold mb-0.5 leading-tight">{drivers.length}</p>
+              <p className="text-[11px] text-blue-600">Live from the database</p>
             </div>
             <div className="bg-blue-100 p-1.5 rounded flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
               <div className="text-blue-600 text-sm"><Users size={18} /></div>
@@ -314,6 +398,7 @@ export default function DriversManagement() {
             <div className="flex-1">
               <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wide mb-0.5 opacity-85 leading-tight">Active</p>
               <p className="text-emerald-900 text-xl font-bold mb-0.5 leading-tight">{drivers.filter(d => d.status === 'active').length}</p>
+              <p className="text-[11px] text-emerald-600">Operational fleet</p>
             </div>
             <div className="bg-emerald-100 p-1.5 rounded flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
               <div className="text-emerald-600 text-sm"><TrendingUp size={18} /></div>
@@ -331,6 +416,7 @@ export default function DriversManagement() {
             <div className="flex-1">
               <p className="text-gray-700 text-xs font-semibold uppercase tracking-wide mb-0.5 opacity-85 leading-tight">Inactive</p>
               <p className="text-gray-900 text-xl font-bold mb-0.5 leading-tight">{drivers.filter(d => d.status === 'inactive').length}</p>
+              <p className="text-[11px] text-gray-600">Awaiting deployment</p>
             </div>
             <div className="bg-gray-100 p-1.5 rounded flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
               <div className="text-gray-600 text-sm"><Users size={18} /></div>
@@ -355,6 +441,7 @@ export default function DriversManagement() {
                   return exp <= in30Days && exp >= today;
                 }).length}
               </p>
+              <p className="text-[11px] text-amber-600">Based on current license dates</p>
             </div>
             <div className="bg-amber-100 p-1.5 rounded flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
               <div className="text-amber-600 text-sm"><AlertTriangle size={18} /></div>
@@ -392,7 +479,7 @@ export default function DriversManagement() {
                 <Pie
                   data={['active', 'inactive', 'suspended']
                     .map(status => ({
-                      name: status.charAt(0).toUpperCase() + status.slice(1),
+                      name: status === 'inactive' ? 'Inactive' : status.charAt(0).toUpperCase() + status.slice(1),
                       value: drivers.filter(d => d.status === status).length,
                     }))
                     .filter(item => item.value > 0)}
@@ -629,10 +716,51 @@ export default function DriversManagement() {
         </div>
       </div>
 
+      {/* License Class Distribution */}
+      <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-gradient-to-br from-violet-100 to-violet-50 rounded-lg border border-violet-100">
+              <Shield size={20} className="text-violet-600" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 text-sm">License Class Mix</h4>
+              <p className="text-xs text-gray-500 mt-1">Distribution of license categories in the fleet</p>
+            </div>
+          </div>
+          <div className="px-3 py-1.5 bg-violet-50 rounded-lg border border-violet-100">
+            <span className="text-sm font-bold text-violet-700">{drivers.length}</span>
+          </div>
+        </div>
+        <div className="w-full h-52">
+          <ResponsiveContainer width="100%" height={208}>
+            <BarChart
+              data={Object.entries(
+                drivers.reduce((acc, driver) => {
+                  const key = driver.license_class?.trim() || 'Unspecified';
+                  acc[key] = (acc[key] || 0) + 1;
+                  return acc;
+                }, {} as Record<string, number>)
+              ).map(([name, value]) => ({ name, value }))}
+              margin={{ top: 8, right: 8, left: -20, bottom: 8 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+              <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(value) => `${value} drivers`} />
+              <Bar dataKey="value" radius={[8, 8, 0, 0]} fill="#8b5cf6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* Search and Filter Controls */}
       <div className="bg-gradient-to-r from-white to-gray-50 rounded-lg border border-gray-200 shadow-md p-3 space-y-3">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-bold text-gray-900">Filter & Search</h3>
+          <div>
+            <h3 className="text-xs font-bold text-gray-900">Filter & Search</h3>
+            <p className="text-[11px] text-gray-500">Narrow the roster by status, expiry risk, or keyword</p>
+          </div>
           <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{filteredDrivers.length} Results</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -659,8 +787,8 @@ export default function DriversManagement() {
               className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm font-medium transition-all hover:border-gray-300"
             >
               <option value="name">↔️ Name</option>
-              <option value="license">📋 License</option>
-              <option value="hire_date">📅 Hire Date</option>
+              <option value="license_number">📋 License</option>
+              <option value="date_of_appointment">📅 Appointment</option>
               <option value="status">🎯 Status</option>
             </select>
           </div>
@@ -692,6 +820,28 @@ export default function DriversManagement() {
             </button>
           ))}
         </div>
+
+        {/* Expiry Filter Pills */}
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {[
+            { value: 'all', label: 'All Expiry' },
+            { value: 'expired', label: 'Expired' },
+            { value: 'soon', label: 'Soon' },
+            { value: 'valid', label: 'Valid' },
+          ].map((item) => (
+            <button
+              key={item.value}
+              onClick={() => setExpiryFilter(item.value as 'all' | 'expired' | 'soon' | 'valid')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
+                expiryFilter === item.value
+                  ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 hover:bg-amber-50 border border-gray-200'
+              }`}
+            >
+              {item.value === 'all' ? '🧭 All' : item.value === 'expired' ? '🔴 Expired' : item.value === 'soon' ? '🟡 Soon' : '🟢 Valid'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Drivers Table */}
@@ -716,41 +866,66 @@ export default function DriversManagement() {
             <table className="w-full text-xs">
               <thead className="bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 border-b border-slate-700 dark:border-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left font-bold text-white">👤 Name</th>
-                  <th className="px-3 py-2 text-left font-bold text-white">📋 License</th>
-                  <th className="px-3 py-2 text-left font-bold text-white">📱 Phone</th>
-                  <th className="px-3 py-2 text-left font-bold text-white">📅 Lic. Exp.</th>
-                  <th className="px-3 py-2 text-left font-bold text-white">🚗 Vehicle</th>
-                  <th className="px-3 py-2 text-left font-bold text-white">🎯 Status</th>
-                  <th className="px-3 py-2 text-center font-bold text-white">⚙️ Actions</th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Users size={14} /> Name</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><BadgeCheck size={14} /> License</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><PhoneCall size={14} /> Phone</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><CalendarClock size={14} /> Lic. Exp.</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Truck size={14} /> Vehicle</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Shield size={14} /> Status</div></th>
+                  <th className="px-3 py-2 text-center font-bold text-white"><div className="flex items-center justify-center gap-1.5"><Zap size={14} /> Actions</div></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredDrivers.map((driver, idx) => (
                   <tr key={driver.id} className={`border-b border-gray-100 hover:bg-blue-50 transition-all ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
                     <td className="px-3 py-2">
-                      <span className="font-bold text-gray-900 text-xs">{driver.name}</span>
-                      <div className="text-xs text-gray-500">DOB: {driver.date_of_birth}</div>
+                      <div className="flex items-center gap-2">
+                        <img src={getDriverAvatarUrl(driver.name)} alt={driver.name} className="h-9 w-9 rounded-full object-cover border border-gray-200 shadow-sm" />
+                        <div>
+                          <div className="font-bold text-gray-900 text-xs">{driver.name}</div>
+                          <div className="text-xs text-gray-500">DOB: {driver.date_of_birth || '—'}</div>
+                          {getDriverExpiryBucket(driver) !== 'valid' && (
+                            <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getDriverExpiryBucket(driver) === 'expired' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {getDriverExpiryBucket(driver) === 'expired' ? <AlertTriangle size={10} /> : <BellRing size={10} />}
+                              {getDriverExpiryBucket(driver) === 'expired' ? 'Needs renewal' : 'Expires soon'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-3 py-2 text-gray-700 font-medium text-xs">{driver.license_number}</td>
-                    <td className="px-3 py-2 text-gray-700 text-xs">{driver.phone || '-'}</td>
+                    <td className="px-3 py-2 text-gray-700 font-medium text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <BadgeCheck size={14} className="text-blue-500" />
+                        <span>{driver.license_number || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-gray-700 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <PhoneCall size={14} className="text-emerald-500" />
+                        <span>{driver.phone || '—'}</span>
+                      </div>
+                    </td>
                     <td className="px-3 py-2 font-semibold text-xs">
                       {(() => {
-                        const exp = new Date(driver.license_expiry);
-                        const today = new Date();
-                        if (exp < today) {
-                          return <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">🔴 Expired</span>;
-                        }
-                        const daysLeft = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                        if (daysLeft <= 30) {
-                          return <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-bold">⚠️ {daysLeft}d</span>;
-                        }
-                        return <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold">✅ Valid</span>;
+                        const expiryState = getLicenseExpiryState(driver);
+                        const ExpiryIcon = expiryState.icon;
+                        const toneClass = expiryState.tone === 'red' ? 'bg-red-100 text-red-700' : expiryState.tone === 'amber' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700';
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${toneClass}`}>
+                            <ExpiryIcon size={12} /> {expiryState.label}
+                          </span>
+                        );
                       })()}
                     </td>
+                    <td className="px-3 py-2 text-gray-600 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <Truck size={14} className="text-slate-500" />
+                        <span>Unassigned</span>
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
-                      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${statusColors[driver.status].badge} shadow-sm`}>
-                        {driver.status === 'active' ? '✅' : driver.status === 'retired' ? '⏸️' : '🚫'} {driver.status.charAt(0).toUpperCase() + driver.status.slice(1)}
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${statusColors[driver.status].badge} shadow-sm`}>
+                        {driver.status === 'active' ? <ShieldCheck size={12} /> : driver.status === 'inactive' ? <Clock size={12} /> : <AlertTriangle size={12} />} {driver.status.charAt(0).toUpperCase() + driver.status.slice(1)}
                       </span>
                     </td>
                     <td className="px-3 py-2">
@@ -854,6 +1029,25 @@ export default function DriversManagement() {
                   />
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Date of Appointment</label>
+                  <input
+                    type="date"
+                    value={formData.date_of_appointment}
+                    onChange={(e) => setFormData({ ...formData, date_of_appointment: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">License Class</label>
+                  <input
+                    type="text"
+                    value={formData.license_class}
+                    onChange={(e) => setFormData({ ...formData, license_class: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                    placeholder="B / CE / C"
+                  />
+                </div>
+                <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">License Expiry</label>
                   <input
                     type="date"
@@ -866,11 +1060,11 @@ export default function DriversManagement() {
                   <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
                   <select
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as DriverFormData['status'] })}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   >
                     <option value="active">Active</option>
-                    <option value="retired">Retired</option>
+                    <option value="inactive">Inactive</option>
                     <option value="suspended">Suspended</option>
                   </select>
                 </div>
@@ -925,35 +1119,31 @@ export default function DriversManagement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-gray-600 text-sm mb-1">First Name</p>
-                  <p className="text-gray-900 font-semibold text-lg">{viewingDriver.first_name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">Last Name</p>
-                  <p className="text-gray-900 font-semibold text-lg">{viewingDriver.last_name}</p>
-                </div>
-                <div>
                   <p className="text-gray-600 text-sm mb-1">Phone</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.phone}</p>
+                  <p className="text-gray-900 font-semibold">{viewingDriver.phone || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600 text-sm mb-1">Email</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.email}</p>
+                  <p className="text-gray-600 text-sm mb-1">Date of Birth</p>
+                  <p className="text-gray-900 font-semibold">{viewingDriver.date_of_birth || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm mb-1">Date of Appointment</p>
+                  <p className="text-gray-900 font-semibold">{viewingDriver.date_of_appointment || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 text-sm mb-1">License Class</p>
+                  <p className="text-gray-900 font-semibold">{viewingDriver.license_class || '—'}</p>
                 </div>
                 <div>
                   <p className="text-gray-600 text-sm mb-1">License Expiry</p>
                   <p className="text-gray-900 font-semibold">
-                    {new Date(viewingDriver.license_expiry).toLocaleDateString()}
+                    {viewingDriver.license_expiry ? new Date(viewingDriver.license_expiry).toLocaleDateString() : '—'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-600 text-sm mb-1">Assigned Vehicle</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.assigned_vehicle || 'None'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">Hire Date</p>
+                  <p className="text-gray-600 text-sm mb-1">Created</p>
                   <p className="text-gray-900 font-semibold">
-                    {new Date(viewingDriver.hire_date).toLocaleDateString()}
+                    {viewingDriver.created_at ? new Date(viewingDriver.created_at).toLocaleDateString() : '—'}
                   </p>
                 </div>
               </div>

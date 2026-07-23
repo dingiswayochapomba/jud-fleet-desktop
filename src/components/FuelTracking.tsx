@@ -1,14 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   BarChart,
   Bar,
   CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
 } from 'recharts';
 import {
   Fuel,
@@ -21,6 +27,7 @@ import {
   MapPin,
   TrendingUp,
   Zap,
+  Search,
   AlertTriangle,
   Download,
   Truck,
@@ -63,6 +70,7 @@ interface Vehicle {
   make: string;
   model: string;
   mileage: number;
+  status?: string;
 }
 
 interface Driver {
@@ -88,6 +96,7 @@ export default function FuelTracking() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<string>('');
+  const [vehicleScope, setVehicleScope] = useState<'all' | string>('all');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,14 +109,20 @@ export default function FuelTracking() {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedVehicleForDetail, setSelectedVehicleForDetail] = useState<Vehicle | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [showPrimaryLedgerModal, setShowPrimaryLedgerModal] = useState(false);
   const [showVehicleLogBookModal, setShowVehicleLogBookModal] = useState(false);
   
   // Filter states
   const [filterType, setFilterType] = useState<'all' | 'month' | 'range'>('all');
+  const [viewWindow, setViewWindow] = useState<'all' | '30' | '90'>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDriver, setSelectedDriver] = useState('all');
+  const [selectedStation, setSelectedStation] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [efficiencyBucket, setEfficiencyBucket] = useState<'all' | 'high' | 'average' | 'low'>('all');
 
   const [formData, setFormData] = useState({
     vehicle_id: '',
@@ -119,6 +134,39 @@ export default function FuelTracking() {
     receipt_url: '',
     refuel_date: new Date().toISOString().slice(0, 10),
   });
+
+  const fleetOverviewData = useMemo(() => {
+    if (!fleetStats) return [];
+
+    const maxValue = Math.max(fleetStats.totalLitres, fleetStats.totalCost, fleetStats.avgKmPerLitre, fleetStats.totalKm);
+
+    return [
+      {
+        metric: 'Litres',
+        value: (fleetStats.totalLitres / maxValue) * 100,
+        rawValue: fleetStats.totalLitres,
+        color: '#3b82f6',
+      },
+      {
+        metric: 'Cost',
+        value: (fleetStats.totalCost / maxValue) * 100,
+        rawValue: fleetStats.totalCost,
+        color: '#10b981',
+      },
+      {
+        metric: 'Efficiency',
+        value: (fleetStats.avgKmPerLitre / maxValue) * 100,
+        rawValue: fleetStats.avgKmPerLitre,
+        color: '#f59e0b',
+      },
+      {
+        metric: 'Distance',
+        value: (fleetStats.totalKm / maxValue) * 100,
+        rawValue: fleetStats.totalKm,
+        color: '#8b5cf6',
+      },
+    ];
+  }, [fleetStats]);
 
   const refreshFleetOverview = async (currentVehicles: Vehicle[] = vehicles) => {
     if (!currentVehicles.length) {
@@ -159,6 +207,7 @@ export default function FuelTracking() {
 
         if (vehiclesList.length > 0) {
           setSelectedVehicle(vehiclesList[0].id);
+          setVehicleScope('all');
           await refreshFleetOverview(vehiclesList);
         } else {
           setError('No vehicles found. Please add vehicles first.');
@@ -175,24 +224,20 @@ export default function FuelTracking() {
     loadInitialData();
   }, []);
 
-  // Fetch fuel logs when selected vehicle changes
+  // Fetch fuel logs for the currently selected vehicle scope
   useEffect(() => {
-    if (!selectedVehicle) return;
+    if (!vehicles.length) return;
 
     const loadFuelLogs = async () => {
       try {
         setLoading(true);
-        const result = await getFuelLogsByVehicle(selectedVehicle);
-        
-        if (result.error) {
-          console.error('Error loading fuel logs:', result.error);
-          setFuelLogs([]);
-          setStats(null);
-          setError(null);
-          return;
-        }
+        const scopeIds = vehicleScope === 'all'
+          ? vehicles.map((vehicle) => vehicle.id)
+          : [vehicleScope];
 
-        const logs = result.data || [];
+        const results = await Promise.all(scopeIds.map((id) => getFuelLogsByVehicle(id)));
+        const logs = results.flatMap((result) => (result.data || []) as FuelLog[]);
+
         setFuelLogs(logs);
         updateFuelDisplay(logs);
         setError(null);
@@ -207,7 +252,7 @@ export default function FuelTracking() {
     };
 
     loadFuelLogs();
-  }, [selectedVehicle, vehicles]);
+  }, [vehicleScope, vehicles]);
 
   const calculateStats = (logs: FuelLog[]) => {
     if (logs.length === 0) {
@@ -288,35 +333,96 @@ export default function FuelTracking() {
     });
   };
 
-  const trendData = buildFuelTrendData(fuelLogs);
-  const fleetChartData = vehicleBreakdown.map((vehicle) => ({
+  const trendData = useMemo(() => buildFuelTrendData(fuelLogs), [fuelLogs]);
+  const fleetChartData = useMemo(() => vehicleBreakdown.map((vehicle) => ({
     name: vehicle.registrationNumber,
     litres: vehicle.totalLitres,
     cost: vehicle.totalCost,
-  }));
+  })), [vehicleBreakdown]);
 
-  const sortedLogs = [...fuelLogs]
-    .sort((a, b) => {
-      return new Date(b.refuel_date).getTime() - new Date(a.refuel_date).getTime();
-    })
-    .filter((log) => {
-      // Date filtering
-      if (filterType === 'month') {
+  const stationBreakdown = useMemo(() => {
+    const counts = fuelLogs.reduce<Record<string, number>>((acc, log) => {
+      const station = log.station_name?.trim() || 'Unspecified';
+      acc[station] = (acc[station] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [fuelLogs]);
+
+  const displayLogs = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const today = new Date();
+
+    return [...fuelLogs]
+      .sort((a, b) => new Date(a.refuel_date).getTime() - new Date(b.refuel_date).getTime())
+      .filter((log) => {
         const logDate = new Date(log.refuel_date);
-        const today = new Date();
-        const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
-        if (logDate < monthAgo) return false;
-      } else if (filterType === 'range' && startDate && endDate) {
-        const logDate = new Date(log.refuel_date);
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        if (logDate < start || logDate > end) return false;
-      }
 
-      return true;
-    });
+        if (viewWindow === '30') {
+          const daysAgo = new Date();
+          daysAgo.setDate(today.getDate() - 30);
+          if (logDate < daysAgo) return false;
+        } else if (viewWindow === '90') {
+          const daysAgo = new Date();
+          daysAgo.setDate(today.getDate() - 90);
+          if (logDate < daysAgo) return false;
+        }
 
-  const filteredLogs = filterFuelLogs(sortedLogs, searchTerm, drivers, vehicles);
+        if (filterType === 'month') {
+          const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+          if (logDate < monthAgo) return false;
+        } else if (filterType === 'range' && startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          if (logDate < start || logDate > end) return false;
+        }
+
+        if (vehicleScope !== 'all' && log.vehicle_id !== vehicleScope) return false;
+        if (selectedDriver !== 'all' && log.driver_id !== selectedDriver) return false;
+        if (selectedStation !== 'all' && log.station_name.toLowerCase() !== selectedStation.toLowerCase()) return false;
+        if (selectedStatus !== 'all') {
+          const vehicle = vehicles.find((item) => item.id === log.vehicle_id);
+          if (!vehicle || (vehicle.status || 'available').toLowerCase() !== selectedStatus.toLowerCase()) return false;
+        }
+
+        if (normalizedSearch) {
+          const driverName = drivers.find((driver) => driver.id === log.driver_id)?.name.toLowerCase() || '';
+          const vehicleName = vehicles.find((vehicle) => vehicle.id === log.vehicle_id)?.registration_number.toLowerCase() || '';
+          const haystack = [
+            log.station_name,
+            driverName,
+            vehicleName,
+            log.cost.toString(),
+            log.litres.toString(),
+            log.odometer.toString(),
+            log.refuel_date,
+          ].join(' ').toLowerCase();
+
+          if (!haystack.includes(normalizedSearch)) return false;
+        }
+
+        if (efficiencyBucket !== 'all') {
+          const sortedLogs = [...fuelLogs].sort((a, b) => new Date(a.refuel_date).getTime() - new Date(b.refuel_date).getTime());
+          const index = sortedLogs.findIndex((entry) => entry.id === log.id);
+          if (index <= 0) return efficiencyBucket === 'low';
+          const previousLog = sortedLogs[index - 1];
+          if (previousLog.odometer && log.odometer) {
+            const efficiency = (log.odometer - previousLog.odometer) / log.litres;
+            if (efficiencyBucket === 'high' && efficiency < 8) return false;
+            if (efficiencyBucket === 'average' && (efficiency < 5 || efficiency > 9)) return false;
+            if (efficiencyBucket === 'low' && efficiency >= 5) return false;
+          }
+        }
+
+        return true;
+      })
+      .reverse();
+  }, [fuelLogs, searchTerm, drivers, vehicles, filterType, viewWindow, startDate, endDate, vehicleScope, selectedDriver, selectedStation, selectedStatus, efficiencyBucket]);
+
+  const filteredLogs = useMemo(() => displayLogs, [displayLogs]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -433,13 +539,13 @@ export default function FuelTracking() {
   };
 
   const exportToCSV = () => {
-    if (sortedLogs.length === 0) {
+    if (filteredLogs.length === 0) {
       setError('No fuel logs to export');
       return;
     }
 
     const headers = ['Date', 'Station', 'Litres', 'Cost (MWK)', 'Cost/Litre', 'Odometer (km)', 'Driver', 'Km/Litre'];
-    const rows = sortedLogs.map((log) => {
+    const rows = filteredLogs.map((log) => {
       const driver = drivers.find((d) => d.id === log.driver_id);
       const costPerLitre = log.litres > 0 ? log.cost / log.litres : 0;
       const kml = 'N/A'; // Would calculate from adjacent records if needed
@@ -464,6 +570,18 @@ export default function FuelTracking() {
     a.click();
     window.URL.revokeObjectURL(url);
   };
+
+  useEffect(() => {
+    if (!fuelLogs.length) {
+      setStats(null);
+      setFuelAvailability(null);
+      return;
+    }
+
+    const selectedVehicleData = vehicles.find((vehicle) => vehicle.id === selectedVehicle);
+    calculateStats(filteredLogs);
+    setFuelAvailability(calculateFuelAvailability(filteredLogs, selectedVehicleData?.mileage || 0));
+  }, [filteredLogs, selectedVehicle, vehicles]);
 
   if (loading && vehicles.length === 0) {
     return (
@@ -736,25 +854,6 @@ export default function FuelTracking() {
         </div>
       )}
 
-      {/* Vehicle Selector */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow">
-        <div className="flex items-center gap-2 mb-3">
-          <Truck className="w-5 h-5 text-[#EA7B7B]" />
-          <label className="block text-sm font-semibold text-gray-900 dark:text-white">Select Vehicle</label>
-        </div>
-        <select
-          value={selectedVehicle}
-          onChange={(e) => setSelectedVehicle(e.target.value)}
-          className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent font-medium text-gray-900"
-        >
-          {vehicles.map((vehicle) => (
-            <option key={vehicle.id} value={vehicle.id}>
-              {vehicle.registration_number} - {vehicle.make} {vehicle.model}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* Fleet Overview */}
       {fleetStats && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -768,22 +867,42 @@ export default function FuelTracking() {
                 <Fuel size={18} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg bg-blue-50 p-3">
-                <p className="text-xs uppercase tracking-wide text-blue-700">Total litres</p>
-                <p className="text-xl font-bold text-blue-900">{fleetStats.totalLitres.toFixed(2)}L</p>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={fleetOverviewData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="metric" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} domain={[0, 100]} />
+                  <Tooltip
+                    formatter={(value: number, name, props: any) => {
+                      const payload = props.payload as { metric: string; rawValue: number };
+                      if (payload.metric === 'Litres') return [`${payload.rawValue.toFixed(2)}L`, payload.metric];
+                      if (payload.metric === 'Cost') return [`K${payload.rawValue.toFixed(0)}`, payload.metric];
+                      if (payload.metric === 'Efficiency') return [`${payload.rawValue.toFixed(2)} km/L`, payload.metric];
+                      return [`${payload.rawValue.toLocaleString()} km`, payload.metric];
+                    }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="value" stroke="#EA7B7B" strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 7 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
+              <div className="rounded-lg bg-blue-50 px-3 py-2">
+                <p className="font-semibold text-blue-700">{fleetStats.totalLitres.toFixed(2)}L</p>
+                <p>Total litres</p>
               </div>
-              <div className="rounded-lg bg-emerald-50 p-3">
-                <p className="text-xs uppercase tracking-wide text-emerald-700">Total cost</p>
-                <p className="text-xl font-bold text-emerald-900">K{fleetStats.totalCost.toFixed(0)}</p>
+              <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                <p className="font-semibold text-emerald-700">K{fleetStats.totalCost.toFixed(0)}</p>
+                <p>Total cost</p>
               </div>
-              <div className="rounded-lg bg-amber-50 p-3">
-                <p className="text-xs uppercase tracking-wide text-amber-700">Avg efficiency</p>
-                <p className="text-xl font-bold text-amber-900">{fleetStats.avgKmPerLitre.toFixed(2)} km/L</p>
+              <div className="rounded-lg bg-amber-50 px-3 py-2">
+                <p className="font-semibold text-amber-700">{fleetStats.avgKmPerLitre.toFixed(2)} km/L</p>
+                <p>Avg efficiency</p>
               </div>
-              <div className="rounded-lg bg-purple-50 p-3">
-                <p className="text-xs uppercase tracking-wide text-purple-700">Distance</p>
-                <p className="text-xl font-bold text-purple-900">{fleetStats.totalKm.toLocaleString()} km</p>
+              <div className="rounded-lg bg-purple-50 px-3 py-2">
+                <p className="font-semibold text-purple-700">{fleetStats.totalKm.toLocaleString()} km</p>
+                <p>Distance</p>
               </div>
             </div>
           </div>
@@ -976,13 +1095,19 @@ export default function FuelTracking() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
+              <AreaChart data={trendData}>
+                <defs>
+                  <linearGradient id="fuelGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#EA7B7B" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#EA7B7B" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="litres" stroke="#EA7B7B" strokeWidth={3} dot={{ r: 3 }} />
-              </LineChart>
+                <Tooltip formatter={(value: number) => `${value.toFixed(1)} L`} />
+                <Area type="monotone" dataKey="litres" stroke="#EA7B7B" fill="url(#fuelGradient)" strokeWidth={3} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -991,7 +1116,7 @@ export default function FuelTracking() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm font-semibold text-gray-900">Fleet Comparison</p>
-              <p className="text-xs text-gray-500">Fuel usage across vehicles</p>
+              <p className="text-xs text-gray-500">Fuel usage and spend across vehicles</p>
             </div>
             <div className="rounded-full bg-blue-100 p-2 text-blue-600">
               <Truck size={18} />
@@ -1005,8 +1130,137 @@ export default function FuelTracking() {
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Bar dataKey="litres" fill="#EA7B7B" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="cost" fill="#F59E0B" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.6fr_0.9fr] gap-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Fuel Operations Filters</p>
+              <p className="text-xs text-gray-500">Slice the page by time, driver, station and efficiency</p>
+            </div>
+            <div className="rounded-full bg-gray-100 p-2 text-gray-600">
+              <Filter size={18} />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => { setFilterType('all'); setViewWindow('all'); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${filterType === 'all' && viewWindow === 'all' ? 'bg-[#EA7B7B] text-white' : 'bg-gray-100 text-gray-700'}`}>
+                All time
+              </button>
+              <button onClick={() => { setFilterType('month'); setViewWindow('all'); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${filterType === 'month' ? 'bg-[#EA7B7B] text-white' : 'bg-gray-100 text-gray-700'}`}>
+                Last month
+              </button>
+              <button onClick={() => { setFilterType('range'); setViewWindow('all'); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${filterType === 'range' ? 'bg-[#EA7B7B] text-white' : 'bg-gray-100 text-gray-700'}`}>
+                Custom range
+              </button>
+              <button onClick={() => setViewWindow('30')} className={`rounded-full px-3 py-1.5 text-sm font-medium ${viewWindow === '30' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                30 days
+              </button>
+              <button onClick={() => setViewWindow('90')} className={`rounded-full px-3 py-1.5 text-sm font-medium ${viewWindow === '90' ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                90 days
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-sm font-medium text-gray-700">
+                <span className="mb-1 block">Vehicle / Registry</span>
+                <select value={vehicleScope} onChange={(e) => setVehicleScope(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#EA7B7B]">
+                  <option value="all">All vehicles</option>
+                  {vehicles.map((vehicle) => (
+                    <option key={vehicle.id} value={vehicle.id}>{vehicle.registration_number}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-gray-700">
+                <span className="mb-1 block">Vehicle status</span>
+                <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#EA7B7B]">
+                  <option value="all">All statuses</option>
+                  <option value="available">Available</option>
+                  <option value="in_use">In use</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="broken">Broken</option>
+                  <option value="disposed">Disposed</option>
+                </select>
+              </label>
+              <label className="text-sm font-medium text-gray-700">
+                <span className="mb-1 block">Driver</span>
+                <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#EA7B7B]">
+                  <option value="all">All drivers</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.id} value={driver.id}>{driver.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-gray-700">
+                <span className="mb-1 block">Station</span>
+                <select value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#EA7B7B]">
+                  <option value="all">All stations</option>
+                  {[...new Set(fuelLogs.map((log) => log.station_name).filter(Boolean))].map((station) => (
+                    <option key={station} value={station}>{station}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-gray-700">
+                <span className="mb-1 block">Efficiency band</span>
+                <select value={efficiencyBucket} onChange={(e) => setEfficiencyBucket(e.target.value as 'all' | 'high' | 'average' | 'low')} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-[#EA7B7B]">
+                  <option value="all">All efficiencies</option>
+                  <option value="high">High efficiency</option>
+                  <option value="average">Average efficiency</option>
+                  <option value="low">Low efficiency</option>
+                </select>
+              </label>
+              <button onClick={() => { setFilterType('all'); setViewWindow('all'); setVehicleScope('all'); setSelectedDriver('all'); setSelectedStation('all'); setSelectedStatus('all'); setEfficiencyBucket('all'); setSearchTerm(''); setStartDate(''); setEndDate(''); }} className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <Search size={16} />
+                Reset filters
+              </button>
+            </div>
+
+            {filterType === 'range' && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                <span className="text-sm text-gray-600">to</span>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Station mix</p>
+              <p className="text-xs text-gray-500">Where refuels happen most often</p>
+            </div>
+            <div className="rounded-full bg-orange-100 p-2 text-orange-600">
+              <MapPin size={18} />
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={stationBreakdown} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
+                  {stationBreakdown.map((entry, index) => (
+                    <Cell key={`${entry.name}-${index}`} fill={['#EA7B7B', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6'][index % 5]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-3 space-y-2">
+            {stationBreakdown.slice(0, 4).map((entry) => (
+              <div key={entry.name} className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
+                <span className="font-medium text-gray-700">{entry.name}</span>
+                <span className="font-semibold text-gray-900">{entry.value} fills</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1032,13 +1286,14 @@ export default function FuelTracking() {
           </div>
 
           {/* Search Bar */}
-          <div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="🔍 Search by station, driver, vehicle, cost, litres, date or odometer..."
+              placeholder="Search by station, driver, vehicle, cost, litres, date or odometer..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#EA7B7B] focus:border-transparent text-sm font-medium text-gray-700 placeholder:text-gray-500"
+              className="w-full rounded-lg border border-gray-300 py-2.5 pl-9 pr-4 text-sm font-medium text-gray-700 placeholder:text-gray-500 focus:border-transparent focus:ring-2 focus:ring-[#EA7B7B]"
             />
           </div>
 
@@ -1046,7 +1301,7 @@ export default function FuelTracking() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 filterType === 'all'
                   ? 'bg-gradient-to-r from-[#EA7B7B] to-[#D65A5A] text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1056,7 +1311,7 @@ export default function FuelTracking() {
             </button>
             <button
               onClick={() => setFilterType('month')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 filterType === 'month'
                   ? 'bg-gradient-to-r from-[#EA7B7B] to-[#D65A5A] text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1066,7 +1321,7 @@ export default function FuelTracking() {
             </button>
             <button
               onClick={() => setFilterType('range')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
                 filterType === 'range'
                   ? 'bg-gradient-to-r from-[#EA7B7B] to-[#D65A5A] text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1074,24 +1329,6 @@ export default function FuelTracking() {
             >
               Date Range
             </button>
-
-            {filterType === 'range' && (
-              <div className="flex items-center gap-2 ml-auto">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#EA7B7B] font-medium"
-                />
-                <span className="text-gray-600 text-sm font-medium">to</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#EA7B7B] font-medium"
-                />
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1120,12 +1357,12 @@ export default function FuelTracking() {
                   const vehicle = vehicles.find((v) => v.id === log.vehicle_id);
                   const costPerLitre = log.litres > 0 ? log.cost / log.litres : 0;
                   
-                  // Calculate km/L for this entry
                   let kml = '-';
                   let efficiencyStatus = '';
                   let efficiencyBg = '';
-                  if (idx > 0 && log.odometer && filteredLogs[idx - 1].odometer) {
-                    const kmDriven = log.odometer - filteredLogs[idx - 1].odometer;
+                  const previousLog = filteredLogs[idx + 1];
+                  if (previousLog && log.odometer && previousLog.odometer) {
+                    const kmDriven = log.odometer - previousLog.odometer;
                     const calculatedKml = kmDriven / log.litres;
                     if (calculatedKml > 0 && calculatedKml < 100) {
                       kml = calculatedKml.toFixed(2);
@@ -1337,15 +1574,15 @@ export default function FuelTracking() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             {/* Header */}
-            <div className="sticky top-0 bg-gradient-to-r from-gray-800 via-amber-900 to-orange-900 text-white p-6 flex items-center justify-between border-b border-gray-800">
+            <div className="sticky top-0 bg-gradient-to-r from-[#44444E] to-[#2E2E33] px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="p-3 bg-white bg-opacity-15 rounded-lg backdrop-blur-sm">
+                <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
                   <Truck className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-orange-200">Vehicle Details</p>
-                  <h2 className="text-2xl font-bold">{selectedVehicleForDetail.registration_number}</h2>
-                  <p className="text-sm text-orange-100">
+                  <p className="text-sm font-semibold text-blue-100">Vehicle Details</p>
+                  <h2 className="text-2xl font-bold text-white">{selectedVehicleForDetail.registration_number}</h2>
+                  <p className="text-sm text-gray-300">
                     {selectedVehicleForDetail.make} {selectedVehicleForDetail.model}
                   </p>
                 </div>
@@ -1480,24 +1717,46 @@ export default function FuelTracking() {
                               </td>
                               <td className="px-4 py-3 text-gray-700">{driver?.name || '-'}</td>
                               <td className="px-4 py-3 text-center">
-                                <div className="flex justify-center gap-2">
+                                <div className="relative flex justify-center">
                                   <button
-                                    onClick={() => {
-                                      handleEdit(log);
-                                      setDetailModalOpen(false);
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setOpenActionMenuId(openActionMenuId === log.id ? null : log.id);
                                     }}
-                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                    title="Edit"
+                                    className="p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 rounded-full transition-colors"
+                                    title="More actions"
+                                    aria-label="More actions"
                                   >
-                                    <Edit className="w-4 h-4" />
+                                    <MoreHorizontal className="w-4 h-4" />
                                   </button>
-                                  <button
-                                    onClick={() => handleDelete(log.id)}
-                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+
+                                  {openActionMenuId === log.id && (
+                                    <div className="absolute right-0 top-8 z-10 w-36 rounded-lg border border-gray-200 bg-white shadow-lg">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEdit(log);
+                                          setDetailModalOpen(false);
+                                          setOpenActionMenuId(null);
+                                        }}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenActionMenuId(null);
+                                          handleDelete(log.id);
+                                        }}
+                                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </td>
                             </tr>

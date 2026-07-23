@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -17,6 +17,8 @@ import SettingsPage from './components/SettingsPage';
 import { firebaseAuth } from './lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { getUserProfileByFirebase } from './lib/supabaseQueries';
+import { logActivity, updateUserProfile } from './lib/firebaseQueries';
+import { canAccessUsersPage, getRoleKey, isUsersReadOnly } from './lib/access';
 
 // Tab configuration
 const tabNames: { [key: string]: string } = {
@@ -41,6 +43,7 @@ function App() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const lastAuthUidRef = useRef<string | null>(null);
 
   // Fetch user profile from database
   const fetchUserProfile = useCallback(async (userId: string, email?: string) => {
@@ -57,15 +60,48 @@ function App() {
       if (data) {
         setUserProfile(data);
         console.log('✓ User profile loaded:', data.email, '(' + data.role + ')');
+        return data;
       } else {
         console.log('No user profile found in database, using default');
         // Set a default profile if no data returned
-        setUserProfile({ id: userId, email: email || 'user@judiciary.mw', role: 'user' });
+        const fallbackProfile = { id: userId, email: email || 'user@judiciary.mw', role: 'user' };
+        setUserProfile(fallbackProfile);
+        return fallbackProfile;
       }
     } catch (error) {
       console.error('Failed to fetch user profile:', error);
       // Fallback default profile
-      setUserProfile({ id: userId, email: email || 'user@judiciary.mw', role: 'user' });
+      const fallbackProfile = { id: userId, email: email || 'user@judiciary.mw', role: 'user' };
+      setUserProfile(fallbackProfile);
+      return fallbackProfile;
+    }
+  }, []);
+
+  const trackSuccessfulLogin = useCallback(async (currentUser: any, profile: any) => {
+    if (!currentUser?.uid || !profile || !profile.email || profile.email === 'user@judiciary.mw') {
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      if (profile.id && profile.id !== currentUser.uid) {
+        await updateUserProfile(profile.id, { last_login: now });
+      }
+
+      await logActivity({
+        actor_id: currentUser.uid,
+        actor_email: currentUser.email || profile.email,
+        actor_name: profile.name || currentUser.email?.split('@')[0] || 'User',
+        action: 'login',
+        category: 'authentication',
+        severity: 'info',
+        details: 'User signed in successfully',
+        target_user_id: profile.id,
+        target_user_email: profile.email,
+        metadata: { source: 'web' },
+      });
+    } catch (error) {
+      console.error('Failed to record login activity:', error);
     }
   }, []);
 
@@ -84,7 +120,11 @@ function App() {
         setIsLoggedIn(true);
         setUser(currentUser);
         try {
-          await fetchUserProfile(currentUser.uid, currentUser.email || undefined);
+          const profile = await fetchUserProfile(currentUser.uid, currentUser.email || undefined);
+          if (currentUser.uid !== lastAuthUidRef.current) {
+            await trackSuccessfulLogin(currentUser, profile);
+            lastAuthUidRef.current = currentUser.uid;
+          }
           if (isMounted) {
             console.log('✓ Auth state changed: User logged in');
           }
@@ -92,6 +132,7 @@ function App() {
           console.error('Error fetching user profile:', err);
         }
       } else {
+        lastAuthUidRef.current = null;
         if (isMounted) {
           setIsLoggedIn(false);
           setUser(null);
@@ -111,7 +152,7 @@ function App() {
       unsubscribe();
       console.log('Auth subscription cleaned up');
     };
-  }, [fetchUserProfile]);
+  }, [fetchUserProfile, trackSuccessfulLogin]);
 
   const handleLogout = async () => {
     try {
@@ -177,7 +218,7 @@ function App() {
         onLogout={handleLogout}
         onSidebarToggle={setSidebarOpen}
         userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
-        userRole={userProfile?.role || 'User'}
+        userRole={getRoleKey(userProfile?.role)}
         isLoggingOut={loggingOut}
       />
 
@@ -186,7 +227,7 @@ function App() {
         {/* Header */}
         <Header
           userName={userProfile?.name || user?.email?.split('@')[0] || 'User'}
-          userRole={userProfile?.role || 'User'}
+          userRole={getRoleKey(userProfile?.role)}
           activeTabLabel={tabNames[activeTab] || 'Dashboard'}
           userId={user?.id}
           onLogout={handleLogout}
@@ -199,7 +240,17 @@ function App() {
           {activeTab === 'dashboard' && <DashboardContent />}
           {activeTab === 'vehicles' && <VehiclesManagement />}
           {activeTab === 'drivers' && <DriversManagement />}
-          {activeTab === 'users' && <UsersManagement />}
+          {activeTab === 'users' && (canAccessUsersPage(userProfile?.role) ? (
+            <UsersManagement
+              currentRole={getRoleKey(userProfile?.role)}
+              readOnly={isUsersReadOnly(userProfile?.role)}
+            />
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-800">
+              <h2 className="text-lg font-semibold">Access restricted</h2>
+              <p className="mt-2 text-sm">Only system administrators and court administrators can access this section.</p>
+            </div>
+          ))}
           {activeTab === 'fuel' && <FuelTracking />}
           {activeTab === 'fuel_analytics' && <FuelAnalytics />}
           {activeTab === 'maintenance' && <MaintenanceManagement />}

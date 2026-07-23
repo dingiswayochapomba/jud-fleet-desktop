@@ -1,23 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Search, MoreVertical, Filter, Download, Shield, Users, Clock, UserCheck, UserCog } from 'lucide-react';
 import { PieChart, Pie, BarChart, Bar, Cell, ResponsiveContainer, Legend, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { createUserProfile, deleteUserProfile, getAllActivityLogs, getAllUsers, logActivity, updateUserProfile } from '../lib/firebaseQueries';
+import { createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { firebaseAuth } from '../lib/firebase';
+import { canCreateUsers, getRoleKey } from '../lib/access';
 
 interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'manager' | 'user';
+  role: 'system_admin' | 'court_administrator' | 'transport_officer';
   status: 'active' | 'inactive';
   position: string;
   jurisdiction: string;
   created_at: string;
   last_login: string | null;
+  profile_image?: string | null;
+  firebase_uid?: string | null;
+  auth_provider?: string | null;
+}
+
+interface ToastMessage {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  message: string;
 }
 
 const roleColors: { [key: string]: { bg: string; text: string; badge: string } } = {
-  admin: { bg: 'bg-purple-50', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-800' },
-  manager: { bg: 'bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
-  user: { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-100 text-gray-800' },
+  system_admin: { bg: 'bg-purple-50', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-800' },
+  court_administrator: { bg: 'bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
+  transport_officer: { bg: 'bg-gray-50', text: 'text-gray-700', badge: 'bg-gray-100 text-gray-800' },
 };
 
 const statusColors: { [key: string]: { bg: string; text: string; badge: string } } = {
@@ -25,10 +38,11 @@ const statusColors: { [key: string]: { bg: string; text: string; badge: string }
   inactive: { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-100 text-red-800' },
 };
 
-const roles = ['admin', 'manager', 'user'];
+const roles = ['system_admin', 'court_administrator', 'transport_officer'];
 const statuses = ['active', 'inactive'];
+const DEFAULT_PROFILE_IMAGE = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80';
 
-export default function UsersManagement() {
+export default function UsersManagement({ currentRole = 'system_admin', readOnly = false }: { currentRole?: string; readOnly?: boolean }) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,84 +53,109 @@ export default function UsersManagement() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [pendingUpdate, setPendingUpdate] = useState<{ id: string; payload: Record<string, any> } | null>(null);
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'email' | 'created'>('name');
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const roleKey = getRoleKey(currentRole);
+  const canManageUsers = canCreateUsers(roleKey);
+  const isReadOnlyView = readOnly || !canManageUsers;
+  const normalizedUserCount = users.filter((u) => getRoleKey(u.role) === 'system_admin').length;
+  const normalizedCourtAdminCount = users.filter((u) => getRoleKey(u.role) === 'court_administrator').length;
+  const normalizedTransportOfficerCount = users.filter((u) => getRoleKey(u.role) === 'transport_officer').length;
 
-  const [formData, setFormData] = useState<Partial<User>>({
+  const [formData, setFormData] = useState<Partial<User> & { password?: string }>({
     email: '',
     name: '',
-    role: 'user',
+    role: 'transport_officer',
     status: 'active',
     position: '',
     jurisdiction: '',
+    password: '',
   });
 
-  // Load mock users
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Mock data for demonstration
-        const mockUsers: User[] = [
-          {
-            id: '1',
-            email: 'admin@judiciary.mw',
-            name: 'Administrator',
-            role: 'admin',
-            status: 'active',
-            position: 'System Administrator',
-            jurisdiction: 'National',
-            created_at: '2025-01-01',
-            last_login: '2026-01-11',
-          },
-          {
-            id: '2',
-            email: 'manager@judiciary.mw',
-            name: 'Fleet Manager',
-            role: 'manager',
-            status: 'active',
-            position: 'Fleet Manager',
-            jurisdiction: 'National',
-            created_at: '2025-02-15',
-            last_login: '2026-01-10',
-          },
-          {
-            id: '3',
-            email: 'user@judiciary.mw',
-            name: 'Regular User',
-            role: 'user',
-            status: 'active',
-            position: 'Operations Officer',
-            jurisdiction: 'Lilongwe',
-            created_at: '2025-03-20',
-            last_login: '2026-01-09',
-          },
-        ];
-        
-        setUsers(mockUsers);
-      } catch (err: any) {
-        console.error('❌ Error loading users:', err);
-        setError('Failed to load users');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const normalizeUser = useCallback((record: any): User => ({
+    id: record.id || '',
+    email: record.email || '',
+    name: record.name || 'Unnamed User',
+    role: (record.role as User['role']) || 'transport_officer',
+    status: (record.status as User['status']) || 'active',
+    position: record.position || '',
+    jurisdiction: record.jurisdiction || '',
+    created_at: record.created_at || new Date().toISOString(),
+    last_login: record.last_login || null,
+    profile_image: record.profile_image || null,
+    firebase_uid: record.firebase_uid || null,
+    auth_provider: record.auth_provider || null,
+  }), []);
 
-    loadUsers();
+  const loadUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: loadError } = await getAllUsers();
+      if (loadError) {
+        throw loadError;
+      }
+
+      setUsers((data || []).map(normalizeUser));
+    } catch (err: any) {
+      console.error('❌ Error loading users:', err);
+      setError(err?.message || 'Failed to load users from Firebase');
+    } finally {
+      setLoading(false);
+    }
+  }, [normalizeUser]);
+
+  const loadActivityLogs = useCallback(async () => {
+    try {
+      setLoadingLogs(true);
+      const { data, error: loadError } = await getAllActivityLogs();
+      if (loadError) {
+        throw loadError;
+      }
+      setActivityLogs(data || []);
+    } catch (err: any) {
+      console.error('❌ Error loading activity logs:', err);
+      setActivityLogs([]);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUsers();
+    void loadActivityLogs();
+  }, [loadUsers, loadActivityLogs]);
+
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const timer = window.setTimeout(() => {
+      setToasts((prev) => prev.slice(1));
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [toasts]);
+
+  const showToast = useCallback((message: string, type: ToastMessage['type'] = 'success') => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, type, message }]);
   }, []);
 
   const resetForm = () => {
     setFormData({
       email: '',
       name: '',
-      role: 'user',
+      role: 'transport_officer',
       status: 'active',
+      position: '',
+      jurisdiction: '',
+      password: '',
     });
     setSubmitError(null);
   };
@@ -124,7 +163,10 @@ export default function UsersManagement() {
   const handleOpenForm = (user?: User) => {
     if (user) {
       setEditingId(user.id);
-      setFormData(user);
+      setFormData({
+        ...user,
+        role: getRoleKey(user.role) as User['role'],
+      });
     } else {
       setEditingId(null);
       resetForm();
@@ -151,60 +193,200 @@ export default function UsersManagement() {
       return;
     }
 
+    if (!editingId && !formData.password?.trim()) {
+      setSubmitError('Password is required to create a new user');
+      return;
+    }
+
     try {
       setSubmitting(true);
-      
+
       if (editingId) {
-        // Update user
-        const updatedUser: User = {
-          id: editingId,
+        const existingUser = users.find((u) => u.id === editingId);
+        const payload = {
+          ...existingUser,
           email: formData.email || '',
           name: formData.name || '',
-          role: formData.role as 'admin' | 'manager' | 'user',
+          role: getRoleKey(formData.role as string) as 'system_admin' | 'court_administrator' | 'transport_officer',
           status: formData.status as 'active' | 'inactive',
           position: formData.position || '',
           jurisdiction: formData.jurisdiction || '',
-          created_at: users.find(u => u.id === editingId)?.created_at || new Date().toISOString(),
-          last_login: users.find(u => u.id === editingId)?.last_login || null,
+          created_at: existingUser?.created_at || new Date().toISOString(),
+          last_login: existingUser?.last_login || null,
         };
-        setUsers(users.map(u => u.id === editingId ? updatedUser : u));
-        setSuccessMessage('✅ User updated successfully!');
-      } else {
-        // Create new user
-        const newUser: User = {
-          id: Date.now().toString(),
-          email: formData.email || '',
-          name: formData.name || '',
-          role: formData.role as 'admin' | 'manager' | 'user',
-          status: formData.status as 'active' | 'inactive',
-          position: formData.position || '',
-          jurisdiction: formData.jurisdiction || '',
-          created_at: new Date().toISOString(),
-          last_login: null,
-        };
-        setUsers([newUser, ...users]);
-        setSuccessMessage('✅ User added successfully!');
+
+        setPendingUpdate({ id: editingId, payload });
+        return;
       }
 
+      const payload = {
+        email: formData.email || '',
+        name: formData.name || '',
+        role: getRoleKey(formData.role as string) as 'system_admin' | 'court_administrator' | 'transport_officer',
+        status: formData.status as 'active' | 'inactive',
+        position: formData.position || '',
+        jurisdiction: formData.jurisdiction || '',
+      };
+
+      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, payload.email, formData.password!.trim());
+      const { data, error: createError } = await createUserProfile(payload, userCredential.user.uid);
+      if (createError || !data) {
+        throw createError || new Error('Unable to create user');
+      }
+
+      await logActivity({
+        actor_id: firebaseAuth.currentUser?.uid || null,
+        actor_email: firebaseAuth.currentUser?.email || null,
+        actor_name: firebaseAuth.currentUser?.displayName || firebaseAuth.currentUser?.email?.split('@')[0] || 'System',
+        action: 'create_user',
+        category: 'user_management',
+        severity: 'info',
+        details: `Created user ${payload.name || payload.email}`,
+        target_user_id: data.id,
+        target_user_email: payload.email,
+        metadata: { role: payload.role, status: payload.status },
+      });
+
+      showToast('User created successfully', 'success');
+      await loadUsers();
       handleCloseForm();
-      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       console.error('❌ Error:', err);
       setSubmitError(`Error: ${err?.message || 'Unknown error'}`);
+      showToast(err?.message || 'Unable to complete the request', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = (id: string) => {
+  const confirmPendingUpdate = async () => {
+    if (!pendingUpdate) return;
+
     try {
-      setUsers(users.filter(u => u.id !== id));
-      setDeleteConfirm(null);
-      setSuccessMessage('✅ User deleted successfully!');
-      setTimeout(() => setSuccessMessage(null), 3000);
+      setSubmitting(true);
+      const { data, error: updateError } = await updateUserProfile(pendingUpdate.id, pendingUpdate.payload);
+      if (updateError || !data) {
+        throw updateError || new Error('Unable to update user');
+      }
+
+      await logActivity({
+        actor_id: firebaseAuth.currentUser?.uid || null,
+        actor_email: firebaseAuth.currentUser?.email || null,
+        actor_name: firebaseAuth.currentUser?.displayName || firebaseAuth.currentUser?.email?.split('@')[0] || 'System',
+        action: 'update_user',
+        category: 'user_management',
+        severity: 'info',
+        details: `Updated user ${pendingUpdate.payload.name || pendingUpdate.payload.email}`,
+        target_user_id: pendingUpdate.id,
+        target_user_email: pendingUpdate.payload.email,
+        metadata: { role: pendingUpdate.payload.role, status: pendingUpdate.payload.status },
+      });
+
+      showToast('User updated successfully', 'success');
+      await loadUsers();
+      setPendingUpdate(null);
+      handleCloseForm();
     } catch (err: any) {
-      setError(`Delete failed: ${err?.message || 'Unknown error'}`);
+      console.error('❌ Error updating user:', err);
+      showToast(err?.message || 'Unable to update user', 'error');
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error: deleteError } = await deleteUserProfile(id);
+      if (deleteError) {
+        throw deleteError;
+      }
+      const deletedUser = users.find((u) => u.id === id);
+      await logActivity({
+        actor_id: firebaseAuth.currentUser?.uid || null,
+        actor_email: firebaseAuth.currentUser?.email || null,
+        actor_name: firebaseAuth.currentUser?.displayName || firebaseAuth.currentUser?.email?.split('@')[0] || 'System',
+        action: 'delete_user',
+        category: 'user_management',
+        severity: 'warning',
+        details: `Deleted user ${deletedUser?.name || deletedUser?.email || id}`,
+        target_user_id: id,
+        target_user_email: deletedUser?.email || null,
+      });
+      await loadUsers();
+      setDeleteConfirm(null);
+      showToast('User deleted successfully', 'success');
+    } catch (err: any) {
+      showToast(`Delete failed: ${err?.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleToggleStatus = async (id: string) => {
+    const userToToggle = users.find((user) => user.id === id);
+    if (!userToToggle) return;
+
+    try {
+      const nextStatus = userToToggle.status === 'active' ? 'inactive' : 'active';
+      const { data, error } = await updateUserProfile(id, { status: nextStatus });
+      if (error || !data) {
+        throw error || new Error('Unable to update user status');
+      }
+
+      await logActivity({
+        actor_id: firebaseAuth.currentUser?.uid || null,
+        actor_email: firebaseAuth.currentUser?.email || null,
+        actor_name: firebaseAuth.currentUser?.displayName || firebaseAuth.currentUser?.email?.split('@')[0] || 'System',
+        action: nextStatus === 'active' ? 'activate_user' : 'deactivate_user',
+        category: 'user_management',
+        severity: 'info',
+        details: `Updated ${userToToggle.name || userToToggle.email} status to ${nextStatus}`,
+        target_user_id: id,
+        target_user_email: userToToggle.email,
+        metadata: { status: nextStatus },
+      });
+      await loadUsers();
+      setOpenDropdown(null);
+      showToast(`User ${nextStatus === 'active' ? 'activated' : 'deactivated'} successfully`, 'success');
+    } catch (err: any) {
+      showToast(`Status update failed: ${err?.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    if (!email) {
+      setError('No email address found for this user.');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(firebaseAuth, email.trim());
+      const matchingUser = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+      await logActivity({
+        actor_id: firebaseAuth.currentUser?.uid || null,
+        actor_email: firebaseAuth.currentUser?.email || null,
+        actor_name: firebaseAuth.currentUser?.displayName || firebaseAuth.currentUser?.email?.split('@')[0] || 'System',
+        action: 'reset_password',
+        category: 'user_management',
+        severity: 'info',
+        details: `Sent password reset email to ${email.trim()}`,
+        target_user_id: matchingUser?.id || null,
+        target_user_email: email.trim(),
+      });
+      setOpenDropdown(null);
+      showToast('Password reset email sent successfully', 'success');
+    } catch (err: any) {
+      showToast(`Password reset failed: ${err?.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  const formatDateTime = (value: string | null) => {
+    if (!value) return '—';
+    return new Date(value).toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   };
 
   const filtered = users
@@ -250,13 +432,15 @@ export default function UsersManagement() {
             <h1 className="text-xl font-bold">User Management</h1>
             <p className="text-gray-300 text-xs mt-1">Manage system users and permissions</p>
           </div>
-          <button
-            onClick={() => handleOpenForm()}
-            className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={16} />
-            Add User
-          </button>
+          {!isReadOnlyView && (
+            <button
+              onClick={() => handleOpenForm()}
+              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus size={16} />
+              Add User
+            </button>
+          )}
         </div>
         
         {/* Stats */}
@@ -270,12 +454,12 @@ export default function UsersManagement() {
             <p className="text-lg font-bold text-green-300">{users.filter(u => u.status === 'active').length}</p>
           </div>
           <div className="bg-white/10 rounded p-2">
-            <p className="text-xs text-gray-300">Administrators</p>
-            <p className="text-lg font-bold text-purple-300">{users.filter(u => u.role === 'admin').length}</p>
+            <p className="text-xs text-gray-300">System Admins</p>
+            <p className="text-lg font-bold text-purple-300">{normalizedUserCount}</p>
           </div>
           <div className="bg-white/10 rounded p-2">
-            <p className="text-xs text-gray-300">Managers</p>
-            <p className="text-lg font-bold text-blue-300">{users.filter(u => u.role === 'manager').length}</p>
+            <p className="text-xs text-gray-300">Court Admins</p>
+            <p className="text-lg font-bold text-blue-300">{normalizedCourtAdminCount}</p>
           </div>
         </div>
       </div>
@@ -293,15 +477,30 @@ export default function UsersManagement() {
         </div>
       )}
 
-      {/* ===== SUCCESS MESSAGE ===== */}
-      {successMessage && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex gap-2">
-          <div className="text-emerald-600 flex-shrink-0 mt-0.5">✓</div>
-          <div className="flex-1">
-            <p className="text-emerald-700 text-sm font-medium">{successMessage}</p>
+      <div className="fixed right-4 top-4 z-[60] flex flex-col gap-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`min-w-[280px] rounded-lg border px-4 py-3 shadow-lg ${
+              toast.type === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : toast.type === 'info'
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium">{toast.message}</p>
+              <button
+                onClick={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
+                className="text-sm font-semibold opacity-70 hover:opacity-100"
+              >
+                ×
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* ===== LOADING STATE ===== */}
       {loading && (
@@ -315,75 +514,89 @@ export default function UsersManagement() {
       {!loading && (
         <>
           {/* ===== USER ACTIVITY GRAPHS ===== */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-4">
             {/* Role Distribution Pie Chart */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Role Distribution</h3>
-              <ResponsiveContainer width="100%" height={200}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Role Distribution</h3>
+                  <p className="text-xs text-gray-500">Platform access across administrators and officers</p>
+                </div>
+                <div className="rounded-full bg-purple-50 px-2.5 py-1 text-[11px] font-semibold text-purple-700">Live snapshot</div>
+              </div>
+              <ResponsiveContainer width="100%" height={230}>
                 <PieChart>
                   <Pie
                     data={[
-                      { name: 'Admins', value: users.filter(u => u.role === 'admin').length },
-                      { name: 'Managers', value: users.filter(u => u.role === 'manager').length },
-                      { name: 'Users', value: users.filter(u => u.role === 'user').length },
+                      { name: 'System Admin', value: users.filter(u => u.role === 'system_admin').length },
+                      { name: 'Court Admin', value: users.filter(u => u.role === 'court_administrator').length },
+                      { name: 'Transport Officer', value: users.filter(u => u.role === 'transport_officer').length },
                     ]}
                     cx="50%"
                     cy="50%"
-                    innerRadius={40}
-                    outerRadius={70}
+                    innerRadius={52}
+                    outerRadius={84}
                     paddingAngle={2}
                     dataKey="value"
+                    cornerRadius={8}
                   >
-                    <Cell fill="#a855f7" />
+                    <Cell fill="#8b5cf6" />
                     <Cell fill="#3b82f6" />
-                    <Cell fill="#6b7280" />
+                    <Cell fill="#f59e0b" />
                   </Pie>
-                  <Tooltip formatter={(value) => `${value} users`} />
-                  <Legend />
+                  <Tooltip formatter={(value) => `${value} user${Number(value) === 1 ? '' : 's'}`} />
+                  <Legend verticalAlign="bottom" height={30} wrapperStyle={{ fontSize: '12px' }} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                <div className="text-center p-2 bg-purple-50 rounded">
-                  <p className="font-semibold text-purple-700">{users.filter(u => u.role === 'admin').length}</p>
-                  <p className="text-gray-600">Admins</p>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                <div className="text-center p-2 bg-purple-50 rounded-lg border border-purple-100">
+                  <p className="font-semibold text-purple-700">{users.filter(u => u.role === 'system_admin').length}</p>
+                  <p className="text-gray-600">System Admin</p>
                 </div>
-                <div className="text-center p-2 bg-blue-50 rounded">
-                  <p className="font-semibold text-blue-700">{users.filter(u => u.role === 'manager').length}</p>
-                  <p className="text-gray-600">Managers</p>
+                <div className="text-center p-2 bg-blue-50 rounded-lg border border-blue-100">
+                  <p className="font-semibold text-blue-700">{users.filter(u => u.role === 'court_administrator').length}</p>
+                  <p className="text-gray-600">Court Admin</p>
                 </div>
-                <div className="text-center p-2 bg-gray-50 rounded">
-                  <p className="font-semibold text-gray-700">{users.filter(u => u.role === 'user').length}</p>
-                  <p className="text-gray-600">Users</p>
+                <div className="text-center p-2 bg-amber-50 rounded-lg border border-amber-100">
+                  <p className="font-semibold text-amber-700">{users.filter(u => u.role === 'transport_officer').length}</p>
+                  <p className="text-gray-600">Transport Officer</p>
                 </div>
               </div>
             </div>
 
             {/* Status Distribution Bar Chart */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">User Status Overview</h3>
-              <ResponsiveContainer width="100%" height={200}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">User Status Overview</h3>
+                  <p className="text-xs text-gray-500">Account activity in the current roster</p>
+                </div>
+                <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Healthy mix</div>
+              </div>
+              <ResponsiveContainer width="100%" height={230}>
                 <BarChart
                   data={[
                     { name: 'Active', value: users.filter(u => u.status === 'active').length },
                     { name: 'Inactive', value: users.filter(u => u.status === 'inactive').length },
                   ]}
+                  margin={{ top: 8, right: 8, left: -8, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
                   <Tooltip />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]} isAnimationActive={true}>
                     <Cell fill="#10b981" />
                     <Cell fill="#ef4444" />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="text-center p-2 bg-green-50 rounded">
-                  <p className="font-semibold text-green-700">{users.filter(u => u.status === 'active').length}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                <div className="text-center p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <p className="font-semibold text-emerald-700">{users.filter(u => u.status === 'active').length}</p>
                   <p className="text-gray-600">Active</p>
                 </div>
-                <div className="text-center p-2 bg-red-50 rounded">
+                <div className="text-center p-2 bg-red-50 rounded-lg border border-red-100">
                   <p className="font-semibold text-red-700">{users.filter(u => u.status === 'inactive').length}</p>
                   <p className="text-gray-600">Inactive</p>
                 </div>
@@ -391,7 +604,7 @@ export default function UsersManagement() {
             </div>
 
             {/* User Statistics */}
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 shadow-sm">
+            <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 shadow-sm">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">User Statistics</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 <div className="p-2 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 rounded-lg border border-blue-200 dark:border-blue-700">
@@ -415,8 +628,8 @@ export default function UsersManagement() {
                 <div className="p-2 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-purple-600 font-semibold uppercase">Admin Accounts</p>
-                      <p className="text-xl font-bold text-purple-700 mt-0.5">{users.filter(u => u.role === 'admin').length}</p>
+                      <p className="text-xs text-purple-600 font-semibold uppercase">System Admins</p>
+                      <p className="text-xl font-bold text-purple-700 mt-0.5">{normalizedUserCount}</p>
                     </div>
                     <Shield size={20} className="text-purple-500" />
                   </div>
@@ -424,14 +637,64 @@ export default function UsersManagement() {
                 <div className="p-2 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-amber-600 font-semibold uppercase">Manager Accounts</p>
-                      <p className="text-xl font-bold text-amber-700 mt-0.5">{users.filter(u => u.role === 'manager').length}</p>
+                      <p className="text-xs text-amber-600 font-semibold uppercase">Court Admins</p>
+                      <p className="text-xl font-bold text-amber-700 mt-0.5">{normalizedCourtAdminCount}</p>
                     </div>
                     <UserCog size={20} className="text-amber-500" />
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ===== SYSTEM ACTIVITY LOG ===== */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">System Activity Log</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Track sign-ins and user management actions across the system</p>
+              </div>
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+                {activityLogs.length} entries
+              </span>
+            </div>
+
+            {loadingLogs ? (
+              <div className="p-6 text-center text-sm text-gray-500">Loading activity log...</div>
+            ) : activityLogs.length === 0 ? (
+              <div className="p-6 text-center text-sm text-gray-500">No activity has been recorded yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="border-b border-gray-200 bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">👤 Actor</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">⚡ Action</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">📂 Category</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">📝 Details</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">🕒 Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activityLogs.map((log) => (
+                      <tr key={log.id} className="border-b border-gray-100 hover:bg-blue-50 transition-all">
+                        <td className="px-6 py-3 text-gray-900 font-medium">
+                          {log.actor_name || log.actor_email || 'System'}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-semibold uppercase text-gray-700">
+                            {log.action || 'unknown'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-gray-700">{log.category || 'general'}</td>
+                        <td className="px-6 py-3 text-gray-700">{log.details || 'No details provided'}</td>
+                        <td className="px-6 py-3 text-gray-600">{formatDateTime(log.created_at || log.timestamp)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* ===== USERS TABLE ===== */}
@@ -473,70 +736,100 @@ export default function UsersManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((user) => (
-                      <tr key={user.id} className="border-b border-gray-100 hover:bg-blue-50 transition-all">
-                        <td className="px-6 py-3 text-gray-900 font-medium">{user.email}</td>
-                        <td className="px-6 py-3 text-gray-700">{user.name}</td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${roleColors[user.role].badge}`}>
-                            {user.role.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3">
-                          <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${statusColors[user.status].badge}`}>
-                            {user.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3 text-gray-600">
-                          {user.last_login ? new Date(user.last_login).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="px-6 py-3 text-center">
-                          <div className="relative inline-block">
-                            <button
-                              onClick={() => setOpenDropdown(openDropdown === user.id ? null : user.id)}
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
-                            >
-                              <MoreVertical size={16} className="text-gray-600" />
-                            </button>
-                            {openDropdown === user.id && (
-                              <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-                                <button
-                                  onClick={() => {
-                                    setViewingId(user.id);
-                                    setOpenDropdown(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                >
-                                  <Eye size={16} />
-                                  View Details
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    handleOpenForm(user);
-                                    setOpenDropdown(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                                >
-                                  <Edit2 size={16} />
-                                  Edit User
-                                </button>
-                                <div className="border-t border-gray-200"></div>
-                                <button
-                                  onClick={() => {
-                                    setDeleteConfirm(user.id);
-                                    setOpenDropdown(null);
-                                  }}
-                                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 last:rounded-b-lg"
-                                >
-                                  <Trash2 size={16} />
-                                  Delete User
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {filtered.map((user) => {
+                      const normalizedRole = getRoleKey(user.role);
+                      return (
+                        <tr key={user.id} className="border-b border-gray-100 hover:bg-blue-50 transition-all">
+                          <td className="px-6 py-3 text-gray-900 font-medium">{user.email}</td>
+                          <td className="px-6 py-3 text-gray-700">{user.name}</td>
+                          <td className="px-6 py-3">
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${roleColors[normalizedRole].badge}`}>
+                              {normalizedRole.replace(/_/g, ' ').toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3">
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${statusColors[user.status].badge}`}>
+                              {user.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-gray-600">
+                            {user.last_login ? new Date(user.last_login).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="px-6 py-3 text-center">
+                            <div className="relative inline-block">
+                              <button
+                                onClick={() => setOpenDropdown(openDropdown === user.id ? null : user.id)}
+                                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                              >
+                                <MoreVertical size={16} className="text-gray-600" />
+                              </button>
+                              {openDropdown === user.id && (
+                                <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                                  <button
+                                    onClick={() => {
+                                      setViewingId(user.id);
+                                      setOpenDropdown(null);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                  >
+                                    <Eye size={16} />
+                                    View Details
+                                  </button>
+                                  {!isReadOnlyView && (
+                                    <button
+                                      onClick={() => {
+                                        handleOpenForm(user);
+                                        setOpenDropdown(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    >
+                                      <Edit2 size={16} />
+                                      Edit User
+                                    </button>
+                                  )}
+                                  <div className="border-t border-gray-200"></div>
+                                  {!isReadOnlyView && (
+                                    <button
+                                      onClick={() => {
+                                        void handleToggleStatus(user.id);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    >
+                                      {user.status === 'active' ? <Shield size={16} /> : <UserCheck size={16} />}
+                                      {user.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                                    </button>
+                                  )}
+                                  {!isReadOnlyView && (
+                                    <button
+                                      onClick={() => {
+                                        void handleResetPassword(user.email);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                    >
+                                      <Shield size={16} />
+                                      Reset Password
+                                    </button>
+                                  )}
+                                  <div className="border-t border-gray-200"></div>
+                                  {!isReadOnlyView && (
+                                    <button
+                                      onClick={() => {
+                                        setDeleteConfirm(user.id);
+                                        setOpenDropdown(null);
+                                      }}
+                                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 last:rounded-b-lg"
+                                    >
+                                      <Trash2 size={16} />
+                                      Remove Profile
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -572,6 +865,19 @@ export default function UsersManagement() {
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {!editingId && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-900 mb-1">Temporary Password *</label>
+                    <input
+                      type="password"
+                      value={formData.password || ''}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
+                      placeholder="Create a secure password"
+                    />
+                  </div>
+                )}
+
                 {/* Email */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-1">Email *</label>
@@ -600,12 +906,12 @@ export default function UsersManagement() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-900 mb-1">Role</label>
                   <select
-                    value={formData.role || 'user'}
+                    value={formData.role || 'transport_officer'}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
                     className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
                   >
                     {roles.map(r => (
-                      <option key={r} value={r}>{r.toUpperCase()}</option>
+                      <option key={r} value={r}>{r.replace(/_/g, ' ').toUpperCase()}</option>
                     ))}
                   </select>
                 </div>
@@ -697,9 +1003,16 @@ export default function UsersManagement() {
                   <div className="p-4 space-y-3 overflow-y-auto flex-1">
                     {/* Basic Info */}
                     <div className="flex items-start justify-between pb-3 border-b border-gray-200">
-                      <div className="flex-1">
-                        <h3 className="text-base font-bold text-gray-900">{user.name}</h3>
-                        <p className="text-xs text-gray-600 mt-0.5">{user.email}</p>
+                      <div className="flex items-center gap-3 flex-1">
+                        <img
+                          src={user.profile_image || DEFAULT_PROFILE_IMAGE}
+                          alt={user.name || user.email}
+                          className="h-16 w-16 rounded-full object-cover border border-gray-200 shadow-sm"
+                        />
+                        <div>
+                          <h3 className="text-base font-bold text-gray-900">{user.name}</h3>
+                          <p className="text-xs text-gray-600 mt-0.5">{user.email}</p>
+                        </div>
                       </div>
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ml-2 ${statusColors[user.status].badge}`}>
                         {user.status.toUpperCase()}
@@ -710,7 +1023,7 @@ export default function UsersManagement() {
                     <div className="grid grid-cols-2 gap-2 bg-gradient-to-br from-blue-50 to-blue-50/50 p-3 rounded-lg border border-blue-100">
                       <div>
                         <p className="text-xs text-gray-600 font-semibold uppercase">🎯 Role</p>
-                        <p className="text-sm font-bold text-gray-900 mt-1">{user.role.toUpperCase()}</p>
+                        <p className="text-sm font-bold text-gray-900 mt-1">{user.role.replace(/_/g, ' ').toUpperCase()}</p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-600 font-semibold uppercase">✓ Status</p>
@@ -771,32 +1084,66 @@ export default function UsersManagement() {
         </div>
       )}
 
+      {/* ===== UPDATE CONFIRMATION ===== */}
+      {pendingUpdate && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <AlertCircle size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Confirm update</h3>
+                <p className="text-sm text-gray-600">You are about to update this user profile.</p>
+              </div>
+            </div>
+            <p className="mb-4 text-sm text-gray-700">
+              Are you sure you want to save the changes for <span className="font-semibold">{pendingUpdate.payload.name || pendingUpdate.payload.email}</span>?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setPendingUpdate(null)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirmPendingUpdate()}
+                className="rounded-lg bg-[#EA7B7B] px-4 py-2 text-sm font-medium text-white hover:bg-[#D65A5A]"
+              >
+                Confirm Update
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== DELETE CONFIRMATION ===== */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-sm w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Delete User?</h3>
-            <p className="text-gray-700 dark:text-gray-300 mb-4">
-              Are you sure you want to delete this user? This action cannot be undone.
-            </p>
-            <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg mb-4">
-              <p className="font-semibold text-gray-900 dark:text-white">
-                {users.find(u => u.id === deleteConfirm)?.name}
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {users.find(u => u.id === deleteConfirm)?.email}
-              </p>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Delete user?</h3>
+                <p className="text-sm text-gray-600">This action cannot be undone.</p>
+              </div>
             </div>
+            <p className="mb-4 text-sm text-gray-700">
+              Are you sure you want to permanently remove <span className="font-semibold">{users.find(u => u.id === deleteConfirm)?.name || 'this user'}</span>?
+            </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
               >
                 Delete
               </button>

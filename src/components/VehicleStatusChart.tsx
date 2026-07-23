@@ -35,22 +35,32 @@ const CHART_HEIGHT = 280;
 export default function VehicleStatusChart() {
   return (
     <div className="w-full flex flex-col min-h-0 min-w-0">
-      <h3 className="text-sm font-semibold text-gray-900 mb-3 shrink-0">Vehicle Status</h3>
-      <div className="w-full min-w-0" style={{ height: CHART_HEIGHT }}>
+      <div className="flex items-start justify-between mb-3 shrink-0">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">Vehicle Status</h3>
+          <p className="text-xs text-gray-500">Current allocation across the fleet</p>
+        </div>
+        <div className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Fleet view</div>
+      </div>
+      <div className="w-full min-w-0 rounded-lg bg-gradient-to-br from-slate-50 to-emerald-50/60 p-2" style={{ height: CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+          <BarChart data={data} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis
               dataKey="status"
               stroke="#9ca3af"
               style={{ fontSize: '12px' }}
               tick={{ fill: '#6b7280' }}
+              axisLine={false}
+              tickLine={false}
             />
             <YAxis
               stroke="#9ca3af"
               style={{ fontSize: '12px' }}
               tick={{ fill: '#6b7280' }}
-              label={{ value: 'Count', angle: -90, position: 'insideLeft' }}
+              label={{ value: 'Count', angle: -90, position: 'insideLeft', fill: '#6b7280', fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar dataKey="count" radius={[8, 8, 0, 0]} isAnimationActive={true}>

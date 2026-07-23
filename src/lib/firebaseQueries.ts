@@ -19,6 +19,64 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function normalizeRoleValue(role?: string | null): string {
+  const value = (role || '').toString().trim().toLowerCase();
+  if (value === 'system_admin' || value === 'admin') return 'system_admin';
+  if (value === 'court_administrator' || value === 'manager') return 'court_administrator';
+  if (value === 'transport_officer' || value === 'user') return 'transport_officer';
+  return 'transport_officer';
+}
+
+export function buildUserProfilePayload(formData: Record<string, any>, firebaseUid?: string | null) {
+  const { password: _password, ...rest } = formData || {};
+  return {
+    ...rest,
+    email: (rest.email || '').trim().toLowerCase(),
+    name: (rest.name || '').trim(),
+    role: normalizeRoleValue(rest.role),
+    status: rest.status || 'active',
+    position: (rest.position || '').trim(),
+    jurisdiction: (rest.jurisdiction || '').trim(),
+    created_at: rest.created_at || nowIso(),
+    last_login: rest.last_login || null,
+    ...(firebaseUid ? { firebase_uid: firebaseUid, auth_provider: 'firebase' } : {}),
+  };
+}
+
+export function buildActivityLogPayload(input: Record<string, any> = {}) {
+  const createdAt = input.created_at || nowIso();
+  return {
+    actor_id: input.actor_id || null,
+    actor_email: (input.actor_email || '').trim().toLowerCase() || null,
+    actor_name: (input.actor_name || '').trim(),
+    action: (input.action || 'unknown').trim().toLowerCase(),
+    category: (input.category || 'general').trim().toLowerCase(),
+    severity: (input.severity || 'info').trim().toLowerCase(),
+    details: (input.details || '').trim(),
+    target_user_id: input.target_user_id || null,
+    target_user_email: input.target_user_email ? (input.target_user_email || '').trim().toLowerCase() : null,
+    metadata: input.metadata || {},
+    created_at: createdAt,
+    timestamp: input.timestamp || createdAt,
+  };
+}
+
+export function buildDriverPayload(input: Record<string, any> = {}) {
+  const normalized = {
+    name: (input.name || '').trim(),
+    license_number: (input.license_number || '').trim(),
+    phone: (input.phone || '').trim(),
+    license_expiry: input.license_expiry || '',
+    status: input.status || 'active',
+    date_of_birth: input.date_of_birth || '',
+    date_of_appointment: input.date_of_appointment || '',
+    license_class: (input.license_class || '').trim(),
+    created_at: input.created_at || nowIso(),
+  };
+
+  return normalized;
+}
+
 function withId<T extends Record<string, any>>(id: string, value: any): T {
   return { id, ...(value || {}) } as T;
 }
@@ -93,8 +151,28 @@ export async function getUserProfile(userId: string) {
   }
 }
 
+export async function getAllUsers() {
+  return listDocs<any>('users', [orderBy('created_at', 'desc')]);
+}
+
+export async function logActivity(activityData: Record<string, any>) {
+  return addOne<any>('activity_logs', buildActivityLogPayload(activityData));
+}
+
+export async function getAllActivityLogs() {
+  return listDocs<any>('activity_logs', [orderBy('created_at', 'desc')]);
+}
+
+export async function createUserProfile(userData: Record<string, any>, firebaseUid?: string | null) {
+  return addOne<any>('users', buildUserProfilePayload(userData, firebaseUid));
+}
+
 export async function updateUserProfile(userId: string, updates: any) {
   return updateOne<any>('users', userId, updates);
+}
+
+export async function deleteUserProfile(userId: string) {
+  return removeOne('users', userId);
 }
 
 export async function getAllVehicles() {
@@ -134,6 +212,9 @@ export async function createDriver(driverData: any) {
 }
 export async function updateDriver(driverId: string, updates: any) {
   return updateOne<any>('drivers', driverId, updates);
+}
+export async function deleteDriver(driverId: string) {
+  return removeOne('drivers', driverId);
 }
 
 export async function getAllInsurance() {
