@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
 import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Users, TrendingUp, AlertTriangle, CheckCircle, Gauge, Clock, Calendar, Shield, Activity, Zap, BellRing, BadgeCheck, PhoneCall, CalendarClock, ShieldCheck, Truck, MoreHorizontal } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { createDriver, deleteDriver, getAllDrivers, testConnection, updateDriver } from '../lib/firebaseQueries';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, PieChart, Pie } from 'recharts';
+import * as echarts from 'echarts';
+import type { EChartsOption } from 'echarts';
+import Swal from 'sweetalert2';
+import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, testConnection, updateDriver } from '../lib/firebaseQueries';
 
 type DriverStatus = 'active' | 'inactive' | 'suspended';
 interface Driver {
@@ -98,7 +101,7 @@ function normalizeDriver(record: any): Driver {
   };
 }
 
-export default function DriversManagement() {
+export default function DriversManagement({ currentUserId, highlightDriverId }: { currentUserId?: string | null; highlightDriverId?: string }) {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +126,7 @@ export default function DriversManagement() {
     date_of_appointment: '',
     license_class: '',
   });
+  const statusChartRef = useRef<HTMLDivElement | null>(null);
 
   const loadDrivers = useCallback(async () => {
     setLoading(true);
@@ -138,7 +142,12 @@ export default function DriversManagement() {
         throw new Error(error?.message || error?.error_description || error?.details || 'Failed to load drivers');
       }
 
-      setDrivers((data || []).map(normalizeDriver));
+      const normalizedDrivers = (data || []).map(normalizeDriver);
+      setDrivers(normalizedDrivers);
+
+      if (normalizedDrivers.length > 0 && currentUserId) {
+        await syncDriverExpiryNotifications(currentUserId, normalizedDrivers);
+      }
     } catch (err: any) {
       console.error('❌ Driver loading exception:', err);
       setError(`Error: ${err?.message || 'Failed to load drivers'}`);
@@ -151,6 +160,82 @@ export default function DriversManagement() {
   useEffect(() => {
     void loadDrivers();
   }, [loadDrivers]);
+
+  useEffect(() => {
+    if (highlightDriverId) {
+      setViewingId(highlightDriverId);
+    }
+  }, [highlightDriverId]);
+
+  useEffect(() => {
+    if (!statusChartRef.current) return;
+
+    const chart = echarts.init(statusChartRef.current);
+    const chartData = ['active', 'inactive', 'suspended'].map((status) => ({
+      name: status === 'inactive' ? 'Inactive' : status.charAt(0).toUpperCase() + status.slice(1),
+      value: drivers.filter((driver) => driver.status === status).length,
+    }));
+
+    const option: EChartsOption = {
+      tooltip: {
+        trigger: 'item',
+        formatter: (params: any) => `${params.name}: ${params.value} drivers (${params.percent}%)`,
+      },
+      legend: {
+        bottom: 0,
+        icon: 'circle',
+        itemWidth: 10,
+        itemHeight: 10,
+        textStyle: { color: '#4b5563', fontSize: 12 },
+        data: chartData.map((item) => item.name),
+      },
+      series: [
+        {
+          name: 'Driver Status',
+          type: 'pie',
+          radius: ['40%', '75%'],
+          center: ['50%', '45%'],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderRadius: 8,
+            borderColor: '#ffffff',
+            borderWidth: 2,
+          },
+          emphasis: {
+            scale: true,
+            scaleSize: 8,
+          },
+          label: {
+            show: true,
+            position: 'outside',
+            formatter: (params: any) => `${params.name}\n${params.value}`,
+            color: '#111827',
+            fontSize: 12,
+            fontWeight: '600',
+          },
+          labelLine: {
+            show: true,
+            length: 10,
+            length2: 8,
+          },
+          data: [
+            { value: chartData[0].value, name: chartData[0].name, itemStyle: { color: '#10b981' } },
+            { value: chartData[1].value, name: chartData[1].name, itemStyle: { color: '#6366f1' } },
+            { value: chartData[2].value, name: chartData[2].name, itemStyle: { color: '#ef4444' } },
+          ],
+        },
+      ],
+    };
+
+    chart.setOption(option);
+    const resize = () => chart.resize();
+    window.addEventListener('resize', resize);
+
+    return () => {
+      chart.dispose();
+      window.removeEventListener('resize', resize);
+    };
+  }, [drivers]);
 
   const handleAddDriver = () => {
     setFormData({
@@ -182,19 +267,35 @@ export default function DriversManagement() {
     setShowForm(true);
   };
 
-  const handleSaveDriver = async () => {
+  const handleSaveDriver = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     setError(null);
     
     if (!formData.license_number?.trim()) {
-      setError('License number is required');
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'License number is required',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
     if (!formData.name?.trim()) {
-      setError('Name is required');
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Name is required',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
     if (!formData.date_of_birth?.trim()) {
-      setError('Date of birth is required');
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Validation Error',
+        text: 'Date of birth is required',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
@@ -210,18 +311,37 @@ export default function DriversManagement() {
         const { data, error } = await updateDriver(editingId, payload);
         if (error) throw error;
         await loadDrivers();
-        setSuccess(`Driver ${payload.name} updated successfully`);
+        setShowForm(false);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Success',
+          text: `Driver ${payload.name} updated successfully`,
+          confirmButtonColor: '#10b981',
+          timer: 2000,
+          timerProgressBar: true,
+        });
       } else {
         const { data, error } = await createDriver(payload);
         if (error) throw error;
         await loadDrivers();
-        setSuccess(`New driver ${payload.name} added successfully`);
+        setShowForm(false);
+        await Swal.fire({
+          icon: 'success',
+          title: 'Driver Added',
+          text: `New driver ${payload.name} added successfully`,
+          confirmButtonColor: '#10b981',
+          timer: 2000,
+          timerProgressBar: true,
+        });
       }
-
-      setShowForm(false);
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError('Failed to save driver: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: `Failed to save driver: ${errorMsg}`,
+        confirmButtonColor: '#ef4444',
+      });
       console.error(err);
     }
   };
@@ -233,10 +353,22 @@ export default function DriversManagement() {
       if (error) throw error;
       await loadDrivers();
       setDeleteConfirm(null);
-      setSuccess(`Driver ${deletedDriver?.name} deleted successfully`);
-      setTimeout(() => setSuccess(null), 3000);
+      await Swal.fire({
+        icon: 'success',
+        title: 'Deleted',
+        text: `Driver ${deletedDriver?.name} deleted successfully`,
+        confirmButtonColor: '#10b981',
+        timer: 2000,
+        timerProgressBar: true,
+      });
     } catch (err) {
-      setError('Failed to delete driver: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: `Failed to delete driver: ${errorMsg}`,
+        confirmButtonColor: '#ef4444',
+      });
       console.error(err);
     }
   };
@@ -271,6 +403,7 @@ export default function DriversManagement() {
 
   const viewingDriver = drivers.find(d => d.id === viewingId);
   const priorityExpiryDrivers = drivers.filter((driver) => getLicenseExpiryState(driver).tone !== 'green').slice(0, 4);
+  const viewingDriverExpiryState = viewingDriver ? getLicenseExpiryState(viewingDriver) : null;
 
   if (loading) {
     return (
@@ -353,7 +486,12 @@ export default function DriversManagement() {
               const expiryState = getLicenseExpiryState(driver);
               const ExpiryIcon = expiryState.icon;
               return (
-                <div key={driver.id} className="flex items-center justify-between rounded-lg border border-amber-200 bg-white/70 px-3 py-2">
+                <button
+                  key={driver.id}
+                  type="button"
+                  onClick={() => setViewingId(driver.id)}
+                  className="flex w-full items-center justify-between rounded-lg border border-amber-200 bg-white/70 px-3 py-2 text-left transition-all hover:border-amber-300 hover:bg-amber-100/70"
+                >
                   <div className="flex items-center gap-2">
                     <ExpiryIcon size={16} className={expiryState.tone === 'red' ? 'text-red-600' : 'text-amber-600'} />
                     <div>
@@ -364,7 +502,7 @@ export default function DriversManagement() {
                   <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${expiryState.tone === 'red' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                     {expiryState.label}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -455,8 +593,8 @@ export default function DriversManagement() {
 
       {/* Status Distribution Chart */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Driver Status Distribution - Doughnut Chart */}
-        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
+        {/* Driver Status Distribution - Enhanced Card */}
+        <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-lg transition-all duration-300">
           <div className="flex items-start justify-between mb-5">
             <div className="flex items-start gap-3">
               <div className="p-2.5 bg-gradient-to-br from-blue-100 to-blue-50 rounded-lg border border-blue-100">
@@ -464,94 +602,166 @@ export default function DriversManagement() {
               </div>
               <div>
                 <h4 className="font-semibold text-gray-900 text-sm">Driver Status</h4>
-                <p className="text-xs text-gray-500 mt-1">Workforce composition</p>
+                <p className="text-xs text-gray-500 mt-1">Workforce composition & availability</p>
               </div>
             </div>
             <div className="flex flex-col items-end gap-1">
               <div className="px-3 py-1.5 bg-blue-50 rounded-lg border border-blue-100">
                 <span className="text-sm font-bold text-blue-700">{drivers.length}</span>
               </div>
-              <span className="text-xs text-gray-500">Total</span>
+              <span className="text-xs text-gray-500">Total Drivers</span>
             </div>
           </div>
-          <div className="w-full h-48 mb-2 min-h-48">
-            <ResponsiveContainer width="100%" height={192}>
-              <PieChart>
-                <Pie
-                  data={['active', 'inactive', 'suspended']
-                    .map(status => ({
-                      name: status === 'inactive' ? 'Inactive' : status.charAt(0).toUpperCase() + status.slice(1),
-                      value: drivers.filter(d => d.status === status).length,
-                    }))
-                    .filter(item => item.value > 0)}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={64}
-                  labelLine={false}
-                  label={({ value, name }: any) => `${value}`}
-                  fill="#8884d8"
-                  dataKey="value"
-                  paddingAngle={1}
-                >
-                  <Cell fill="#10b981" />
-                  <Cell fill="#6366f1" />
-                  <Cell fill="#ef4444" />
-                </Pie>
-                <Tooltip
-                  formatter={(value) => `${value} drivers`}
-                  contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', boxShadow: '0 10px 25px rgba(0,0,0,0.15)', fontSize: '12px', padding: '8px 12px' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+
+          {/* Pie Chart */}
+          <div className="w-full h-48 mb-4 min-h-48">
+            <div ref={statusChartRef} className="w-full h-full" />
           </div>
-          {/* Enhanced legend with icons and detailed stats */}
-          <div className="mt-5 space-y-3 text-xs border-t border-gray-100 pt-4">
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-blue-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full group-hover:scale-125 transition-transform"></div>
-                <CheckCircle size={16} className="text-emerald-500 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">Active</span>
-                  <span className="text-gray-400 text-xs">Operational</span>
+
+          {/* Status Cards with Detailed Metrics */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {[
+              {
+                status: 'active',
+                label: 'Active',
+                bgColor: 'bg-emerald-50',
+                borderColor: 'border-emerald-200',
+                iconColor: 'text-emerald-600',
+                icon: CheckCircle,
+                textColor: 'text-emerald-700',
+              },
+              {
+                status: 'inactive',
+                label: 'Inactive',
+                bgColor: 'bg-indigo-50',
+                borderColor: 'border-indigo-200',
+                iconColor: 'text-indigo-600',
+                icon: Gauge,
+                textColor: 'text-indigo-700',
+              },
+              {
+                status: 'suspended',
+                label: 'Suspended',
+                bgColor: 'bg-red-50',
+                borderColor: 'border-red-200',
+                iconColor: 'text-red-600',
+                icon: AlertTriangle,
+                textColor: 'text-red-700',
+              },
+            ].map((item) => {
+              const count = drivers.filter(d => d.status === item.status).length;
+              const percentage = drivers.length > 0 ? Math.round((count / drivers.length) * 100) : 0;
+              const expiredInStatus = drivers
+                .filter(d => d.status === item.status && new Date(d.license_expiry) < new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000))
+                .length;
+              const Icon = item.icon;
+
+              return (
+                <div key={item.status} className={`${item.bgColor} border-2 ${item.borderColor} rounded-lg p-3 transition-all hover:shadow-md`}>
+                  <div className="flex items-start gap-2 mb-2">
+                    <Icon size={16} className={item.iconColor} />
+                    <div className="flex-1">
+                      <div className={`text-xs font-semibold ${item.textColor}`}>{item.label}</div>
+                      <div className="text-2xl font-bold text-gray-900">{count}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Share:</span>
+                      <span className={`font-semibold ${item.textColor}`}>{percentage}%</span>
+                    </div>
+                    {expiredInStatus > 0 && (
+                      <div className="flex justify-between pt-1 border-t border-gray-200">
+                        <span className="text-gray-600">At-Risk:</span>
+                        <span className="font-semibold text-red-600">{expiredInStatus}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Key Performance Indicators */}
+          <div className="border-t border-gray-100 pt-4">
+            <h5 className="text-xs font-semibold text-gray-900 mb-3 uppercase tracking-wide">Performance Metrics</h5>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <Activity size={14} className="text-blue-600" />
+                  <span className="text-sm text-gray-700">Operational Rate</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <div className="font-bold text-gray-900 text-sm">
+                      {drivers.length > 0 ? Math.round((drivers.filter(d => d.status === 'active').length / drivers.length) * 100) : 0}%
+                    </div>
+                  </div>
+                  <div className="w-8 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-600 transition-all"
+                      style={{
+                        width: `${drivers.length > 0 ? Math.round((drivers.filter(d => d.status === 'active').length / drivers.length) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => d.status === 'active').length}</div>
-                <div className="text-emerald-600 font-semibold">{drivers.length > 0 ? Math.round((drivers.filter(d => d.status === 'active').length / drivers.length) * 100) : 0}%</div>
+              <div className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-orange-600" />
+                  <span className="text-sm text-gray-700">License Issues</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <div className="font-bold text-gray-900 text-sm">
+                      {drivers.filter(d => new Date(d.license_expiry) < new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000)).length}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-600">drivers</div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <Truck size={14} className="text-violet-600" />
+                  <span className="text-sm text-gray-700">Avg. Appointment</span>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-gray-900 text-sm">
+                    {drivers.length > 0
+                      ? Math.floor(
+                          drivers.reduce((sum, d) => {
+                            if (!d.date_of_appointment) return sum;
+                            const years = (new Date().getTime() - new Date(d.date_of_appointment).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                            return sum + years;
+                          }, 0) / drivers.length
+                        )
+                      : 0}
+                  </div>
+                  <div className="text-xs text-gray-600">years ago</div>
+                </div>
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-indigo-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-indigo-500 rounded-full group-hover:scale-125 transition-transform"></div>
-                <Gauge size={16} className="text-indigo-500 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">Inactive</span>
-                  <span className="text-gray-400 text-xs">Idle</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => d.status === 'inactive').length}</div>
-                <div className="text-indigo-600 font-semibold">{drivers.length > 0 ? Math.round((drivers.filter(d => d.status === 'inactive').length / drivers.length) * 100) : 0}%</div>
-              </div>
+          </div>
+
+          {/* Enhanced Legend */}
+          <div className="mt-4 space-y-2 text-xs border-t border-gray-100 pt-4">
+            <div className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+              <span className="text-gray-700">Active drivers are available for operations</span>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-red-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-red-500 rounded-full group-hover:scale-125 transition-transform"></div>
-                <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">Suspended</span>
-                  <span className="text-gray-400 text-xs">Unavailable</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => d.status === 'suspended').length}</div>
-                <div className="text-red-600 font-semibold">{drivers.length > 0 ? Math.round((drivers.filter(d => d.status === 'suspended').length / drivers.length) * 100) : 0}%</div>
-              </div>
+            <div className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+              <span className="text-gray-700">Inactive drivers are temporarily unavailable</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              <span className="text-gray-700">Suspended drivers require immediate review</span>
             </div>
           </div>
         </div>
 
-        {/* License Expiry Timeline - Enhanced Bar Chart */}
+        {/* License Expiry Timeline - Enhanced with detailed tracking */}
         <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-lg transition-all gap-4">
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-start gap-4">
@@ -565,10 +775,12 @@ export default function DriversManagement() {
             </div>
             <div className="flex flex-col items-end">
               <div className="text-2xl font-bold text-gray-900">{drivers.length}</div>
-              <div className="text-xs text-gray-500 font-medium">Total</div>
+              <div className="text-xs text-gray-500 font-medium">Total Drivers</div>
             </div>
           </div>
-          <div className="w-full h-40 min-h-40">
+
+          {/* Overview Chart */}
+          <div className="w-full h-40 min-h-40 mb-4">
             <ResponsiveContainer width="100%" height={160}>
               <BarChart
                 data={[
@@ -639,78 +851,167 @@ export default function DriversManagement() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* Enhanced legend with icons and detailed stats */}
-          <div className="mt-5 space-y-3 text-xs border-t border-gray-100 pt-4">
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-red-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-red-600 rounded-full group-hover:scale-125 transition-transform"></div>
-                <AlertTriangle size={16} className="text-red-600 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">Expired</span>
-                  <span className="text-gray-400 text-xs">Immediate action</span>
+
+          {/* Status Summary Grid */}
+          <div className="grid grid-cols-4 gap-3 mb-4 text-xs">
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+              <div className="font-bold text-red-700">{drivers.filter(d => new Date(d.license_expiry) < new Date()).length}</div>
+              <div className="text-red-600">Expired</div>
+            </div>
+            <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
+              <div className="font-bold text-orange-700">{drivers.filter(d => {
+                const exp = new Date(d.license_expiry);
+                const today = new Date();
+                const in15Days = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
+                return exp > today && exp <= in15Days;
+              }).length}</div>
+              <div className="text-orange-600">0-15 Days</div>
+            </div>
+            <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200">
+              <div className="font-bold text-yellow-700">{drivers.filter(d => {
+                const exp = new Date(d.license_expiry);
+                const today = new Date();
+                const in15Days = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
+                const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                return exp > in15Days && exp <= in30Days;
+              }).length}</div>
+              <div className="text-yellow-600">15-30 Days</div>
+            </div>
+            <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+              <div className="font-bold text-green-700">{drivers.filter(d => {
+                const exp = new Date(d.license_expiry);
+                const today = new Date();
+                const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+                return exp > in30Days;
+              }).length}</div>
+              <div className="text-green-600">30+ Days</div>
+            </div>
+          </div>
+
+          {/* Detailed Driver List - Critical to Non-Critical */}
+          <div className="border-t border-gray-100 pt-4">
+            <h5 className="text-sm font-semibold text-gray-900 mb-3">At-Risk Drivers (Sorted by Urgency)</h5>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {drivers
+                .filter(d => {
+                  const exp = new Date(d.license_expiry);
+                  return exp < new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000);
+                })
+                .sort((a, b) => {
+                  const dateA = new Date(a.license_expiry).getTime();
+                  const dateB = new Date(b.license_expiry).getTime();
+                  return dateA - dateB;
+                })
+                .slice(0, 10)
+                .map((driver) => {
+                  const exp = new Date(driver.license_expiry);
+                  const today = new Date();
+                  const daysLeft = Math.floor((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  
+                  let status = 'safe';
+                  let statusColor = 'bg-green-100 text-green-700 border-green-200';
+                  let statusLabel = 'SAFE';
+                  let statusIcon = Shield;
+
+                  if (daysLeft < 0) {
+                    status = 'expired';
+                    statusColor = 'bg-red-100 text-red-700 border-red-200';
+                    statusLabel = 'EXPIRED';
+                    statusIcon = AlertTriangle;
+                  } else if (daysLeft <= 15) {
+                    status = 'critical';
+                    statusColor = 'bg-red-100 text-red-700 border-red-200';
+                    statusLabel = `${daysLeft}d LEFT`;
+                    statusIcon = AlertTriangle;
+                  } else if (daysLeft <= 30) {
+                    status = 'warning';
+                    statusColor = 'bg-yellow-100 text-yellow-700 border-yellow-200';
+                    statusLabel = `${daysLeft}d LEFT`;
+                    statusIcon = Clock;
+                  }
+
+                  const Icon = statusIcon;
+
+                  return (
+                    <div
+                      key={driver.id}
+                      className={`p-3 rounded-lg border-2 transition-all hover:shadow-md cursor-pointer ${
+                        status === 'expired' || status === 'critical'
+                          ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                          : status === 'warning'
+                          ? 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+                          : 'bg-green-50 border-green-200 hover:bg-green-100'
+                      }`}
+                      onClick={() => setViewingId(driver.id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <Icon size={16} className={status === 'expired' || status === 'critical' ? 'text-red-600' : status === 'warning' ? 'text-yellow-600' : 'text-green-600'} />
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-900 text-sm">{driver.name}</div>
+                            <div className="text-xs text-gray-600">{driver.license_number}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <div className="font-bold text-gray-900 text-sm">
+                              {exp.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </div>
+                            <div className="text-xs text-gray-600">{exp.getFullYear()}</div>
+                          </div>
+                          <div className={`px-2 py-1 rounded border font-semibold text-xs ${statusColor}`}>
+                            {statusLabel}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            status === 'expired' || status === 'critical'
+                              ? 'bg-red-600'
+                              : status === 'warning'
+                              ? 'bg-yellow-500'
+                              : 'bg-green-600'
+                          }`}
+                          style={{
+                            width: `${Math.max(0, Math.min(100, ((daysLeft + 1) / 90) * 100))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              {drivers.filter(d => {
+                const exp = new Date(d.license_expiry);
+                return exp < new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000);
+              }).length === 0 && (
+                <div className="text-center py-4 text-gray-500 text-sm">
+                  <CheckCircle size={16} className="mx-auto mb-2 text-green-600" />
+                  All driver licenses are valid!
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => new Date(d.license_expiry) < new Date()).length}</div>
-                <div className="text-red-600 font-semibold">URGENT</div>
+              )}
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="mt-4 space-y-2 text-xs border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-600 rounded-full"></div>
+                <span className="text-gray-700">Expired or 0-15 days: Immediate action required</span>
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-orange-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-orange-500 rounded-full group-hover:scale-125 transition-transform"></div>
-                <Clock size={16} className="text-orange-600 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">0-15 days</span>
-                  <span className="text-gray-400 text-xs">Very soon</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => {
-                  const exp = new Date(d.license_expiry);
-                  const today = new Date();
-                  const in15Days = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
-                  return exp > today && exp <= in15Days;
-                }).length}</div>
-                <div className="text-orange-600 font-semibold">CRITICAL</div>
+            <div className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                <span className="text-gray-700">15-30 days: Schedule renewal soon</span>
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-yellow-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-yellow-500 rounded-full group-hover:scale-125 transition-transform"></div>
-                <Zap size={16} className="text-yellow-600 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">15-30 days</span>
-                  <span className="text-gray-400 text-xs">Upcoming</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => {
-                  const exp = new Date(d.license_expiry);
-                  const today = new Date();
-                  const in15Days = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000);
-                  const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-                  return exp > in15Days && exp <= in30Days;
-                }).length}</div>
-                <div className="text-yellow-600 font-semibold">WARNING</div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-emerald-50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 bg-emerald-600 rounded-full group-hover:scale-125 transition-transform"></div>
-                <Shield size={16} className="text-emerald-600 flex-shrink-0" />
-                <div>
-                  <span className="text-gray-700 font-semibold block">30+ days</span>
-                  <span className="text-gray-400 text-xs">No action needed</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold text-gray-900">{drivers.filter(d => {
-                  const exp = new Date(d.license_expiry);
-                  const today = new Date();
-                  const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
-                  return exp > in30Days;
-                }).length}</div>
-                <div className="text-emerald-600 font-semibold">SAFE</div>
+            <div className="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                <span className="text-gray-700">30+ days: No action needed</span>
               </div>
             </div>
           </div>
@@ -806,12 +1107,12 @@ export default function DriversManagement() {
         </div>
 
         {/* Status Filter Pills */}
-        <div className="flex flex-wrap gap-1.5 pt-1.5">
+        <div className="flex flex-nowrap overflow-x-auto gap-1.5 pt-1.5 pb-0.5">
           {['all', 'active', 'inactive', 'suspended'].map(status => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
+              className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
                 filterStatus === status
                   ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-105'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
@@ -823,7 +1124,7 @@ export default function DriversManagement() {
         </div>
 
         {/* Expiry Filter Pills */}
-        <div className="flex flex-wrap gap-1.5 pt-1">
+        <div className="flex flex-nowrap overflow-x-auto gap-1.5 pt-1 pb-0.5">
           {[
             { value: 'all', label: 'All Expiry' },
             { value: 'expired', label: 'Expired' },
@@ -833,7 +1134,7 @@ export default function DriversManagement() {
             <button
               key={item.value}
               onClick={() => setExpiryFilter(item.value as 'all' | 'expired' | 'soon' | 'valid')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
+              className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
                 expiryFilter === item.value
                   ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg scale-105'
                   : 'bg-white text-gray-700 hover:bg-amber-50 border border-gray-200'
@@ -870,9 +1171,11 @@ export default function DriversManagement() {
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Users size={14} /> Name</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><BadgeCheck size={14} /> License</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><PhoneCall size={14} /> Phone</div></th>
-                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><CalendarClock size={14} /> Lic. Exp.</div></th>
-                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Truck size={14} /> Vehicle</div></th>
-                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Shield size={14} /> Status</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Calendar size={14} /> DOB</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Shield size={14} /> License Class</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Calendar size={14} /> Appointed</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><CalendarClock size={14} /> Exp. Date</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Activity size={14} /> Status</div></th>
                   <th className="px-3 py-2 text-center font-bold text-white"><div className="flex items-center justify-center gap-1.5"><Zap size={14} /> Actions</div></th>
                 </tr>
               </thead>
@@ -895,7 +1198,6 @@ export default function DriversManagement() {
                         <img src={getDriverAvatarUrl(driver.name)} alt={driver.name} className="h-9 w-9 rounded-full object-cover border border-gray-200 shadow-sm" />
                         <div>
                           <div className="font-bold text-gray-900 text-xs">{driver.name}</div>
-                          <div className="text-xs text-gray-500">DOB: {driver.date_of_birth || '—'}</div>
                           {getDriverExpiryBucket(driver) !== 'valid' && (
                             <div className={`mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getDriverExpiryBucket(driver) === 'expired' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                               {getDriverExpiryBucket(driver) === 'expired' ? <AlertTriangle size={10} /> : <BellRing size={10} />}
@@ -917,6 +1219,17 @@ export default function DriversManagement() {
                         <span>{driver.phone || '—'}</span>
                       </div>
                     </td>
+                    <td className="px-3 py-2 text-gray-700 text-xs font-medium">
+                      {driver.date_of_birth ? new Date(driver.date_of_birth).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700 text-xs font-medium">
+                      <span className="inline-block px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full font-semibold">
+                        {driver.license_class || '—'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-700 text-xs font-medium">
+                      {driver.date_of_appointment ? new Date(driver.date_of_appointment).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
+                    </td>
                     <td className="px-3 py-2 font-semibold text-xs">
                       {(() => {
                         const expiryState = getLicenseExpiryState(driver);
@@ -928,12 +1241,6 @@ export default function DriversManagement() {
                           </span>
                         );
                       })()}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <Truck size={14} className="text-slate-500" />
-                        <span>Unassigned</span>
-                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${statusColors[driver.status].badge} shadow-sm`}>
@@ -1012,24 +1319,24 @@ export default function DriversManagement() {
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-4 space-y-3">
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-red-700 text-xs flex items-start gap-2">
-                  <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-                  {error}
-                </div>
-              )}
+            <form onSubmit={(event) => { void handleSaveDriver(event); }} className="w-full">
+              {/* Content */}
+              <div className="p-4 space-y-3">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-red-700 text-xs flex items-start gap-2">
+                    <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+                    {error}
+                  </div>
+                )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">License Number *</label>
                   <input
                     type="text"
                     value={formData.license_number}
                     onChange={(e) => setFormData({ ...formData, license_number: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
-                    placeholder="DL-001-2024"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
                 </div>
                 <div>
@@ -1038,8 +1345,7 @@ export default function DriversManagement() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
-                    placeholder="John Banda"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
                 </div>
                 <div>
@@ -1048,7 +1354,7 @@ export default function DriversManagement() {
                     type="date"
                     value={formData.date_of_birth}
                     onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
                 </div>
                 <div>
@@ -1057,8 +1363,7 @@ export default function DriversManagement() {
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
-                    placeholder="+265991234567"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
                 </div>
                 <div>
@@ -1067,18 +1372,29 @@ export default function DriversManagement() {
                     type="date"
                     value={formData.date_of_appointment}
                     onChange={(e) => setFormData({ ...formData, date_of_appointment: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">License Class</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.license_class}
                     onChange={(e) => setFormData({ ...formData, license_class: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
-                    placeholder="B / CE / C"
-                  />
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                  >
+                    <option value="">Select a license class</option>
+                    <option value="Class A">Class A</option>
+                    <option value="Class B">Class B</option>
+                    <option value="Class EB">Class EB</option>
+                    <option value="Class C1">Class C1</option>
+                    <option value="Class C">Class C</option>
+                    <option value="Class EC1">Class EC1</option>
+                    <option value="Class EC">Class EC</option>
+                    <option value="Class F">Class F</option>
+                    <option value="Permit G">Permit G</option>
+                    <option value="Permit P">Permit P</option>
+                    <option value="Permit D">Permit D</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">License Expiry</label>
@@ -1086,7 +1402,7 @@ export default function DriversManagement() {
                     type="date"
                     value={formData.license_expiry}
                     onChange={(e) => setFormData({ ...formData, license_expiry: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
                 </div>
                 <div>
@@ -1094,31 +1410,33 @@ export default function DriversManagement() {
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as DriverFormData['status'] })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                     <option value="suspended">Suspended</option>
                   </select>
                 </div>
+                </div>
               </div>
-            </div>
 
-            {/* Footer */}
-            <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-2">
-              <button
-                onClick={() => setShowForm(false)}
-                className="px-3 py-1.5 border border-gray-300 rounded text-xs text-[#EA7B7B] hover:bg-red-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveDriver}
-                className="px-3 py-1.5 bg-[#EA7B7B] text-white rounded text-xs hover:bg-[#D65A5A] transition-colors font-medium shadow-md"
-              >
-                {editingId ? 'Update Driver' : 'Create Driver'}
-              </button>
-            </div>
+              {/* Footer */}
+              <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="px-3 py-1.5 border border-gray-300 rounded text-xs text-[#EA7B7B] hover:bg-red-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#EA7B7B] text-white rounded text-xs hover:bg-[#D65A5A] transition-colors font-medium shadow-md"
+                >
+                  {editingId ? 'Update Driver' : 'Create Driver'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1126,84 +1444,116 @@ export default function DriversManagement() {
       {/* View Details Modal */}
       {viewingDriver && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Driver Details</h2>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden animate-[fadeIn_0.25s_ease-out]">
+            <div className="relative">
+              <div className="h-36 bg-gradient-to-r from-[#2E2E33] via-[#3F3F46] to-[#1F2024]" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_45%)]" />
+              <div className="absolute inset-x-0 top-0 flex items-center justify-between px-5 py-4">
+                <div className="text-white">
+                  <p className="text-[11px] uppercase tracking-[0.35em] opacity-80">Driver Profile</p>
+                  <h2 className="text-lg font-semibold">{viewingDriver.name}</h2>
+                </div>
+                <button
+                  onClick={() => setViewingId(null)}
+                  className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-full transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="px-6 pb-6 -mt-10">
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                  <div className="flex items-end gap-4">
+                    <div className="h-24 w-24 rounded-full border-4 border-white bg-gradient-to-br from-[#2E2E33] via-[#44444E] to-[#1F2024] flex items-center justify-center text-2xl font-bold text-white shadow-xl">
+                      {viewingDriver.name
+                        .split(' ')
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0])
+                        .join('')
+                        .toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-semibold text-gray-900">{viewingDriver.name}</h3>
+                      <p className="text-sm text-gray-600">{viewingDriver.license_number || 'No license number provided'}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center px-3.5 py-1.5 rounded-full text-sm font-semibold shadow-sm ${statusColors[viewingDriver.status].badge}`}>
+                      {viewingDriver.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                    {viewingDriverExpiryState && viewingDriverExpiryState.tone !== 'green' && (
+                      <span className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-semibold shadow-sm ${viewingDriverExpiryState.tone === 'red' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <AlertTriangle size={14} />
+                        {viewingDriverExpiryState.label.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-3 shadow-sm">
+                    <p className="text-[11px] uppercase tracking-[0.25em] text-indigo-500">License Class</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900">{viewingDriver.license_class || '—'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-3 shadow-sm">
+                    <p className="text-[11px] uppercase tracking-[0.25em] text-amber-600">Expiry</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900">
+                      {viewingDriver.license_expiry ? new Date(viewingDriver.license_expiry).toLocaleDateString() : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-3 shadow-sm">
+                    <p className="text-[11px] uppercase tracking-[0.25em] text-emerald-600">Joined</p>
+                    <p className="mt-1 text-base font-semibold text-gray-900">
+                      {viewingDriver.created_at ? new Date(viewingDriver.created_at).toLocaleDateString() : '—'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Phone</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.phone || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Date of Birth</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.date_of_birth || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Date of Appointment</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.date_of_appointment || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Status</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.status.charAt(0).toUpperCase() + viewingDriver.status.slice(1)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-gray-50 to-white border-t border-gray-200 px-6 py-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
               <button
                 onClick={() => setViewingId(null)}
-                className="text-white hover:bg-white hover:bg-opacity-20 p-1 rounded transition-colors"
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium text-sm text-gray-700"
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6 space-y-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">License Number</p>
-                  <p className="text-gray-900 font-semibold text-lg">{viewingDriver.license_number}</p>
-                </div>
-                <span className={`inline-block px-4 py-2 rounded-full text-sm font-bold ${statusColors[viewingDriver.status].badge}`}>
-                  {viewingDriver.status.replace('_', ' ').toUpperCase()}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">Phone</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.phone || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">Date of Birth</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.date_of_birth || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">Date of Appointment</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.date_of_appointment || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">License Class</p>
-                  <p className="text-gray-900 font-semibold">{viewingDriver.license_class || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">License Expiry</p>
-                  <p className="text-gray-900 font-semibold">
-                    {viewingDriver.license_expiry ? new Date(viewingDriver.license_expiry).toLocaleDateString() : '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-sm mb-1">Created</p>
-                  <p className="text-gray-900 font-semibold">
-                    {viewingDriver.created_at ? new Date(viewingDriver.created_at).toLocaleDateString() : '—'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end gap-3">
-              <button
-                onClick={() => setDeleteConfirm(viewingDriver.id)}
-                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
-              >
-                Delete Driver
+                Close
               </button>
               <button
                 onClick={() => {
                   handleEditDriver(viewingDriver);
                   setViewingId(null);
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
+                className="px-4 py-2 bg-gradient-to-r from-[#EA7B7B] to-[#D65A5A] text-white rounded-lg hover:brightness-110 transition-all font-medium text-sm shadow-sm"
               >
                 Edit Driver
               </button>
               <button
-                onClick={() => setViewingId(null)}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm"
+                onClick={() => setDeleteConfirm(viewingDriver.id)}
+                className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
               >
-                Close
+                Delete Driver
               </button>
             </div>
           </div>
