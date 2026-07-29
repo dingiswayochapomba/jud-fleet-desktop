@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Truck, BarChart3, Search, CheckCircle, Activity, Wrench, AlertTriangle, Recycle, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { getAllVehicles, createVehicle, updateVehicle, deleteVehicle } from '../lib/supabaseQueries';
+import { validateVehicleForm } from '../lib/vehicleUtils';
 
 // ============= INTERFACES =============
 interface Vehicle {
@@ -204,16 +205,9 @@ export default function VehiclesManagement({ highlightVehicleId }: { highlightVe
     setSubmitError(null);
 
     // Validation
-    if (!formData.registration_number?.trim()) {
-      setSubmitError('Registration number is required');
-      return;
-    }
-    if (!formData.make?.trim()) {
-      setSubmitError('Make is required');
-      return;
-    }
-    if (!formData.model?.trim()) {
-      setSubmitError('Model is required');
+    const { valid, errors } = validateVehicleForm(formData as any);
+    if (!valid) {
+      setSubmitError(errors.join('; '));
       return;
     }
 
@@ -639,15 +633,20 @@ export default function VehiclesManagement({ highlightVehicleId }: { highlightVe
                 <table className="w-full text-xs">
                   <thead className="border-b border-[#44444E]">
                     <tr>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">📋 Registration</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">🚗 Vehicle</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">📅 Year</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">🛣️ Mileage</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">⛽ Fuel Type</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">�️ Cost Center</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">🏛️ Division</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">�🎯 Status</th>
-                      <th className="px-6 py-3 text-center font-bold text-gray-900">⚙️ Actions</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Registration</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Make</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Model</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Year</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Status</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Mileage</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Fuel Type</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Chassis #</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Engine #</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Purchase Date</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Insurance Expiry</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Cost Center</th>
+                      <th className="px-4 py-2 text-left font-bold text-gray-900">Division</th>
+                      <th className="px-4 py-2 text-center font-bold text-gray-900">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -655,18 +654,23 @@ export default function VehiclesManagement({ highlightVehicleId }: { highlightVe
                       const colors = statusColors[vehicle.status];
                       return (
                         <tr key={vehicle.id} className={`border-b border-gray-100 hover:bg-blue-50 transition-all ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                          <td className="px-6 py-4 text-sm font-semibold text-gray-900">{vehicle.registration_number}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.make} {vehicle.model}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.year}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.mileage.toLocaleString()} km</td>
-                          <td className="px-6 py-4 text-sm text-gray-600 capitalize">{vehicle.fuel_type}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.cost_center || '—'}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.division || '—'}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">{vehicle.registration_number}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.make || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.model || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.year || '—'}</td>
+                          <td className="px-4 py-3">
                             <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${colors.badge}`}>
                               {vehicle.status.replace(/_/g, ' ')}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{(vehicle.mileage ?? 0).toLocaleString()} km</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 capitalize">{vehicle.fuel_type || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.chassis_number || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.engine_number || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.purchase_date ? new Date(vehicle.purchase_date).toLocaleDateString('en-GB') : '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry).toLocaleDateString('en-GB') : '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.cost_center || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.division || '—'}</td>
                           <td className="px-6 py-4">
                             <div className="relative">
                               <button
