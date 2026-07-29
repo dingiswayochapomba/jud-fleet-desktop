@@ -101,3 +101,72 @@ export function buildDriverRetirementNotifications(userId: string, drivers: (Dri
     return [];
   });
 }
+
+function getVehicleDaysUntilDate(value?: string): number | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+  return Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function buildVehicleStatusNotifications(userId: string, vehicles: { id?: string; registration_number?: string; status?: string; insurance_expiry?: string; }[]): NotificationPayload[] {
+  return vehicles.flatMap((vehicle) => {
+    const name = vehicle.registration_number || 'Unnamed vehicle';
+    const status = (vehicle.status || '').toString().toLowerCase();
+    const notifications: NotificationPayload[] = [];
+
+    if (status === 'broken') {
+      notifications.push({
+        user_id: userId,
+        message: `Vehicle ${name} is currently broken down and needs immediate attention.`,
+        type: 'alert',
+        is_read: false,
+        created_at: new Date().toISOString(),
+        related_entity: 'vehicles',
+        related_id: vehicle.id,
+      });
+    }
+
+    if (status === 'maintenance') {
+      notifications.push({
+        user_id: userId,
+        message: `Vehicle ${name} is due for maintenance.`,
+        type: 'warning',
+        is_read: false,
+        created_at: new Date().toISOString(),
+        related_entity: 'vehicles',
+        related_id: vehicle.id,
+      });
+    }
+
+    const insuranceDays = getVehicleDaysUntilDate(vehicle.insurance_expiry);
+    if (insuranceDays !== null) {
+      if (insuranceDays < 0) {
+        notifications.push({
+          user_id: userId,
+          message: `Vehicle ${name}'s insurance has expired. Please renew coverage immediately.`,
+          type: 'alert',
+          is_read: false,
+          created_at: new Date().toISOString(),
+          related_entity: 'vehicles',
+          related_id: vehicle.id,
+        });
+      } else if (insuranceDays <= 15) {
+        notifications.push({
+          user_id: userId,
+          message: `Vehicle ${name}'s insurance expires in ${insuranceDays} day${insuranceDays === 1 ? '' : 's'}.`,
+          type: 'warning',
+          is_read: false,
+          created_at: new Date().toISOString(),
+          related_entity: 'vehicles',
+          related_id: vehicle.id,
+        });
+      }
+    }
+
+    return notifications;
+  });
+}

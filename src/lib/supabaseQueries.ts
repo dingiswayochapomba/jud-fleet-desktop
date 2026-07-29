@@ -21,6 +21,7 @@ export {
   deleteDriver,
   syncDriverExpiryNotifications,
   syncDriverRetirementNotifications,
+  syncVehicleStatusNotifications,
   markDriverRetired,
   testConnection,
   

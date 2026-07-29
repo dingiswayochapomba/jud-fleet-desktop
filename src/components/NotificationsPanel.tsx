@@ -244,7 +244,7 @@ export default function NotificationsPanel({ userId, isOpen, onClose, onNotifica
                       <p className="text-xs text-gray-500">
                         {new Date(notification.created_at).toLocaleString()}
                       </p>
-                      {notification.related_entity === 'drivers' && notification.related_id && (
+                      {(notification.related_entity === 'drivers' || notification.related_entity === 'vehicles' || notification.related_entity === 'maintenance') && notification.related_id && (
                         <button
                           type="button"
                           onClick={() => handleNotificationNavigate(notification)}

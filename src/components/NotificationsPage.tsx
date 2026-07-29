@@ -318,7 +318,7 @@ export default function NotificationsPage({ userId, onNavigateNotification }: No
                             {new Date(notification.created_at).toLocaleString()}
                           </p>
                         </div>
-                        {notification.related_entity === 'drivers' && notification.related_id && (
+                        {(notification.related_entity === 'drivers' || notification.related_entity === 'vehicles' || notification.related_entity === 'maintenance') && notification.related_id && (
                           <button
                             type="button"
                             onClick={() => handleNotificationNavigate(notification)}

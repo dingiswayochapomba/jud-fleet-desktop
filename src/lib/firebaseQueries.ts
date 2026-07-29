@@ -380,6 +380,30 @@ export async function syncDriverRetirementNotifications(userId: string, drivers:
   }
 }
 
+export async function syncVehicleStatusNotifications(userId: string, vehicles: any[]) {
+  if (!userId) return { data: [], error: null };
+
+  try {
+    const existing = await listDocs<any>('notifications', [where('user_id', '==', userId)]);
+    const existingIds = new Set(
+      (existing.data || [])
+        .filter((item: any) => item.related_entity === 'vehicles' && item.related_id)
+        .map((item: any) => item.related_id)
+    );
+    const generated = buildVehicleStatusNotifications(userId, vehicles).filter((item) => !existingIds.has(item.related_id));
+
+    const created = [] as any[];
+    for (const notification of generated) {
+      const result = await addOne<any>('notifications', notification);
+      if (!result.error) created.push(result.data);
+    }
+
+    return { data: created, error: null };
+  } catch (error) {
+    return { data: [], error };
+  }
+}
+
 export async function markDriverRetired(driverId: string) {
   try {
     await updateDoc(doc(firestoreDb, 'drivers', driverId), { status: 'retired' });
