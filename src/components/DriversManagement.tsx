@@ -4,7 +4,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, 
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import Swal from 'sweetalert2';
-import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, syncDriverRetirementNotifications, testConnection, updateDriver } from '../lib/supabaseQueries';
+import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, syncDriverRetirementNotifications, markDriverRetired, testConnection, updateDriver } from '../lib/supabaseQueries';
 
 type DriverStatus = 'active' | 'inactive' | 'suspended' | 'retired';
 interface Driver {
@@ -186,6 +186,36 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
         } catch (e) {
           // Non-fatal: retirement sync failing should not block UI
           console.warn('Retirement sync failed', e);
+        }
+        // Automatically mark drivers aged >= 65 as retired in the DB if not already set
+        try {
+          const rawDrivers = data || [];
+          for (const rec of rawDrivers) {
+            try {
+              const dob = rec?.date_of_birth || rec?.dob || '';
+              if (!dob) continue;
+              const d = new Date(dob);
+              if (Number.isNaN(d.getTime())) continue;
+              const today = new Date();
+              let age = today.getFullYear() - d.getFullYear();
+              const m = today.getMonth() - d.getMonth();
+              if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age -= 1;
+              const currentStatus = (rec?.status || '').toString().toLowerCase();
+              if (age >= 65 && currentStatus !== 'retired') {
+                // mark retired (non-blocking per driver)
+                try {
+                  await markDriverRetired(rec.id);
+                  console.info(`Marked driver ${rec.id} as retired (age ${age})`);
+                } catch (err) {
+                  console.warn('Failed to mark driver retired', rec.id, err);
+                }
+              }
+            } catch (inner) {
+              /* ignore per-record errors */
+            }
+          }
+        } catch (err) {
+          console.warn('Retirement DB update pass failed', err);
         }
       }
     } catch (err: any) {
