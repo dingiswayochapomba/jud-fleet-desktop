@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Wrench, TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
+import {
+  createMaintenanceRecord,
+  deleteMaintenanceRecord,
+  getAllMaintenanceRecords,
+  updateMaintenanceRecord,
+} from '../lib/firebaseQueries';
 
 interface MaintenanceRecord {
   id: string;
@@ -48,7 +54,7 @@ const serviceTypeNames: Record<string, string> = {
   major_repair: 'Major Repair',
 };
 
-export default function MaintenanceManagement() {
+export default function MaintenanceManagement({ highlightRecordId }: { highlightRecordId?: string }) {
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +81,12 @@ export default function MaintenanceManagement() {
     notes: '',
   });
 
-  // Mock data
+  useEffect(() => {
+    if (highlightRecordId) {
+      setViewingId(highlightRecordId);
+    }
+  }, [highlightRecordId]);
+
   useEffect(() => {
     loadRecords();
   }, []);
@@ -84,99 +95,28 @@ export default function MaintenanceManagement() {
     setLoading(true);
     setError(null);
     try {
-      const mockRecords: MaintenanceRecord[] = [
-        {
-          id: '1',
-          vehicle_id: 'v1',
-          vehicle_registration: 'JJ-16-AB',
-          service_type: 'oil_change',
-          description: 'Regular oil and filter change',
-          cost: 15000,
-          service_date: '2026-01-05',
-          next_service_date: '2026-04-05',
-          technician_name: 'John Mwale',
-          mileage_at_service: 45200,
-          status: 'completed',
-          notes: 'Service completed successfully',
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          vehicle_id: 'v2',
-          vehicle_registration: 'JJ-16-AC',
-          service_type: 'tire_rotation',
-          description: 'Tire rotation and alignment',
-          cost: 8500,
-          service_date: '2026-01-08',
-          next_service_date: '2026-07-08',
-          technician_name: 'Grace Banda',
-          mileage_at_service: 62600,
-          status: 'completed',
-          notes: 'All tires in good condition',
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '3',
-          vehicle_id: 'v3',
-          vehicle_registration: 'JJ-16-AD',
-          service_type: 'brake_service',
-          description: 'Brake pad replacement and inspection',
-          cost: 22000,
-          service_date: '2026-01-02',
-          next_service_date: '2026-12-02',
-          technician_name: 'Peter Chisaka',
-          mileage_at_service: 28100,
-          status: 'completed',
-          notes: 'Front brake pads replaced',
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '4',
-          vehicle_id: 'v4',
-          vehicle_registration: 'JJ-16-AE',
-          service_type: 'inspection',
-          description: 'Annual vehicle inspection',
-          cost: 5000,
-          service_date: '2026-01-15',
-          next_service_date: '2027-01-15',
-          technician_name: 'Mercy Phiri',
-          mileage_at_service: 78700,
-          status: 'scheduled',
-          notes: 'Awaiting inspection slot',
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '5',
-          vehicle_id: 'v5',
-          vehicle_registration: 'JJ-16-AF',
-          service_type: 'filter_replacement',
-          description: 'Air filter replacement',
-          cost: 3500,
-          service_date: '2026-01-10',
-          next_service_date: '2026-07-10',
-          technician_name: 'John Mwale',
-          mileage_at_service: 95200,
-          status: 'in_progress',
-          notes: 'Currently being serviced',
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: '6',
-          vehicle_id: 'v1',
-          vehicle_registration: 'JJ-16-AB',
-          service_type: 'major_repair',
-          description: 'Engine transmission service',
-          cost: 75000,
-          service_date: '2025-12-20',
-          next_service_date: '2027-12-20',
-          technician_name: 'Samuel Kachale',
-          mileage_at_service: 42000,
-          status: 'completed',
-          notes: 'Major overhaul completed',
-          created_at: new Date().toISOString(),
-        },
-      ];
-      setRecords(mockRecords);
+      const { data, error } = await getAllMaintenanceRecords();
+      if (error) {
+        throw error;
+      }
+
+      const normalizedRecords: MaintenanceRecord[] = (data || []).map((record: any) => ({
+        id: record.id,
+        vehicle_id: record.vehicle_id || '',
+        vehicle_registration: record.vehicle_registration || record.registration_number || '',
+        service_type: (record.service_type || 'oil_change') as MaintenanceRecord['service_type'],
+        description: record.description || '',
+        cost: Number(record.cost || 0),
+        service_date: record.service_date || record.maintenance_date || '',
+        next_service_date: record.next_service_date || '',
+        technician_name: record.technician_name || record.technician || '',
+        mileage_at_service: Number(record.mileage_at_service || record.mileage || 0),
+        status: (record.status || 'completed') as MaintenanceRecord['status'],
+        notes: record.notes || '',
+        created_at: record.created_at || '',
+      }));
+
+      setRecords(normalizedRecords);
     } catch (err) {
       setError('Failed to load maintenance records');
       console.error(err);
@@ -228,16 +168,18 @@ export default function MaintenanceManagement() {
     }
 
     try {
+      const payload = {
+        ...formData,
+        created_at: new Date().toISOString(),
+      };
+
       if (editingId) {
-        setRecords(records.map(r => r.id === editingId ? { ...r, ...formData } : r));
+        await updateMaintenanceRecord(editingId, payload);
       } else {
-        const newRecord: MaintenanceRecord = {
-          id: Date.now().toString(),
-          ...formData,
-          created_at: new Date().toISOString(),
-        };
-        setRecords([...records, newRecord]);
+        await createMaintenanceRecord(payload);
       }
+
+      await loadRecords();
       setShowForm(false);
       setError(null);
     } catch (err) {
@@ -248,7 +190,8 @@ export default function MaintenanceManagement() {
 
   const handleDeleteRecord = async (id: string) => {
     try {
-      setRecords(records.filter(r => r.id !== id));
+      await deleteMaintenanceRecord(id);
+      await loadRecords();
       setDeleteConfirm(null);
     } catch (err) {
       setError('Failed to delete record');

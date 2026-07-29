@@ -4,7 +4,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, 
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import Swal from 'sweetalert2';
-import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, testConnection, updateDriver } from '../lib/firebaseQueries';
+import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, testConnection, updateDriver } from '../lib/supabaseQueries';
 
 type DriverStatus = 'active' | 'inactive' | 'suspended';
 interface Driver {
@@ -17,6 +17,8 @@ interface Driver {
   date_of_birth: string;
   date_of_appointment: string;
   license_class: string;
+  cost_center?: string;
+  division?: string;
   created_at: string;
 }
 
@@ -29,6 +31,8 @@ interface DriverFormData {
   date_of_birth: string;
   date_of_appointment: string;
   license_class: string;
+  cost_center: string;
+  division: string;
 }
 
 const statusColors: Record<string, { badge: string; bg: string; text: string; icon: string }> = {
@@ -44,6 +48,15 @@ const stockDriverImages = [
   'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=160&q=80',
   'https://images.unsplash.com/photo-1519345182560-3f2917c472ef?auto=format&fit=crop&w=160&q=80',
   'https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=160&q=80',
+];
+
+const divisionOptions = [
+  'Supreme Court of Appeal',
+  'High Court – General Division',
+  'High Court – Commercial Division',
+  'Industrial Relations Court',
+  'Subordinate Courts',
+  'Local and Traditional Courts',
 ];
 
 function getDriverAvatarUrl(name: string) {
@@ -97,6 +110,8 @@ function normalizeDriver(record: any): Driver {
     date_of_birth: record?.date_of_birth || '',
     date_of_appointment: record?.date_of_appointment || '',
     license_class: record?.license_class || '',
+    cost_center: record?.cost_center || '',
+    division: record?.division || '',
     created_at: record?.created_at || new Date().toISOString(),
   };
 }
@@ -125,6 +140,8 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
     date_of_birth: new Date().toISOString().split('T')[0],
     date_of_appointment: '',
     license_class: '',
+    cost_center: '',
+    division: '',
   });
   const statusChartRef = useRef<HTMLDivElement | null>(null);
 
@@ -247,6 +264,8 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
       date_of_birth: new Date().toISOString().split('T')[0],
       date_of_appointment: '',
       license_class: '',
+      cost_center: '',
+      division: '',
     });
     setEditingId(null);
     setShowForm(true);
@@ -262,6 +281,8 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
       date_of_birth: driver.date_of_birth || '',
       date_of_appointment: driver.date_of_appointment || '',
       license_class: driver.license_class || '',
+      cost_center: driver.cost_center || '',
+      division: driver.division || '',
     });
     setEditingId(driver.id);
     setShowForm(true);
@@ -305,6 +326,8 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
         name: formData.name.trim(),
         license_number: formData.license_number.trim(),
         phone: formData.phone.trim(),
+        cost_center: formData.cost_center.trim(),
+        division: formData.division,
       };
 
       if (editingId) {
@@ -377,7 +400,7 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
     .filter((driver) => {
       const matchesStatus = filterStatus === 'all' || driver.status === filterStatus;
       const matchesExpiry = expiryFilter === 'all' || getDriverExpiryBucket(driver) === expiryFilter;
-      const matchesSearch = !searchTerm || [driver.name, driver.license_number, driver.phone, driver.license_class]
+      const matchesSearch = !searchTerm || [driver.name, driver.license_number, driver.phone, driver.license_class, driver.cost_center, driver.division]
         .join(' ')
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
@@ -1057,92 +1080,104 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
       </div>
 
       {/* Search and Filter Controls */}
-      <div className="bg-gradient-to-r from-white to-gray-50 rounded-lg border border-gray-200 shadow-md p-3 space-y-3">
-        <div className="flex items-center justify-between mb-2">
+      <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-4 space-y-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h3 className="text-xs font-bold text-gray-900">Filter & Search</h3>
-            <p className="text-[11px] text-gray-500">Narrow the roster by status, expiry risk, or keyword</p>
+            <h3 className="text-sm font-semibold text-gray-900">Filter & search drivers</h3>
+            <p className="text-xs text-gray-500">Refine the roster by status, expiry risk, or keyword.</p>
           </div>
-          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{filteredDrivers.length} Results</span>
+          <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+            <span>{filteredDrivers.length}</span>
+            <span className="text-blue-500">Results</span>
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-          {/* Search Input */}
-          <div className="relative md:col-span-2">
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_0.9fr] items-end">
+          <div className="relative min-w-0">
             <input
               type="text"
-              placeholder="🔍 Search name, license, phone..."
+              placeholder="Search name, license, phone, cost center..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-2 pl-9 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm transition-all hover:border-gray-300"
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-2 pl-11 text-sm text-gray-900 shadow-sm transition focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
-            <svg className="absolute left-2.5 top-2.5 text-gray-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="11" cy="11" r="8"></circle>
-              <path d="m21 21-4.35-4.35"></path>
-            </svg>
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
           </div>
 
-          {/* Sort By */}
-          <div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.3em] text-gray-500">Sort</label>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-sm font-medium transition-all hover:border-gray-300"
+              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-800 shadow-sm transition focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
             >
-              <option value="name">↔️ Name</option>
-              <option value="license_number">📋 License</option>
-              <option value="date_of_appointment">📅 Appointment</option>
-              <option value="status">🎯 Status</option>
+              <option value="name">Name</option>
+              <option value="license_number">License</option>
+              <option value="date_of_appointment">Appointment</option>
+              <option value="status">Status</option>
             </select>
           </div>
 
-          {/* Sort Order */}
-          <div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.3em] text-gray-500">Order</label>
             <button
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-              className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg hover:bg-blue-50 bg-white transition-all text-xs font-bold text-gray-700 hover:border-blue-300"
+              className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 shadow-sm transition hover:border-blue-300"
             >
-              {sortOrder === 'asc' ? '↑ A-Z' : '↓ Z-A'}
+              {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
             </button>
           </div>
         </div>
 
-        {/* Status Filter Pills */}
-        <div className="flex flex-nowrap overflow-x-auto gap-1.5 pt-1.5 pb-0.5">
-          {['all', 'active', 'inactive', 'suspended'].map(status => (
-            <button
-              key={status}
-              onClick={() => setFilterStatus(status)}
-              className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
-                filterStatus === status
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-105'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-              }`}
-            >
-              {status === 'all' ? '📊 All' : status === 'active' ? '✅ Active' : status === 'inactive' ? '⏸️ Inactive' : '🚫 Suspended'}
-            </button>
-          ))}
-        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-gray-500">Status</div>
+            <div className="flex flex-wrap gap-2">
+              {['all', 'active', 'inactive', 'suspended'].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setFilterStatus(status)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    filterStatus === status
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {status === 'all'
+                    ? 'All'
+                    : status === 'active'
+                    ? 'Active'
+                    : status === 'inactive'
+                    ? 'Inactive'
+                    : 'Suspended'}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        {/* Expiry Filter Pills */}
-        <div className="flex flex-nowrap overflow-x-auto gap-1.5 pt-1 pb-0.5">
-          {[
-            { value: 'all', label: 'All Expiry' },
-            { value: 'expired', label: 'Expired' },
-            { value: 'soon', label: 'Soon' },
-            { value: 'valid', label: 'Valid' },
-          ].map((item) => (
-            <button
-              key={item.value}
-              onClick={() => setExpiryFilter(item.value as 'all' | 'expired' | 'soon' | 'valid')}
-              className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold transition-all transform hover:scale-105 ${
-                expiryFilter === item.value
-                  ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-amber-50 border border-gray-200'
-              }`}
-            >
-              {item.value === 'all' ? '🧭 All' : item.value === 'expired' ? '🔴 Expired' : item.value === 'soon' ? '🟡 Soon' : '🟢 Valid'}
-            </button>
-          ))}
+          <div className="grid gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-gray-500">Expiry risk</div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: 'all', label: 'All' },
+                { value: 'expired', label: 'Expired' },
+                { value: 'soon', label: 'Soon' },
+                { value: 'valid', label: 'Valid' },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  onClick={() => setExpiryFilter(item.value as 'all' | 'expired' | 'soon' | 'valid')}
+                  className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    expiryFilter === item.value
+                      ? 'bg-amber-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1173,6 +1208,8 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><PhoneCall size={14} /> Phone</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Calendar size={14} /> DOB</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Shield size={14} /> License Class</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Calendar size={14} /> Cost Center</div></th>
+                  <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Calendar size={14} /> Division</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Calendar size={14} /> Appointed</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><CalendarClock size={14} /> Exp. Date</div></th>
                   <th className="px-3 py-2 text-left font-bold text-white"><div className="flex items-center gap-1.5"><Activity size={14} /> Status</div></th>
@@ -1226,6 +1263,12 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                       <span className="inline-block px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full font-semibold">
                         {driver.license_class || '—'}
                       </span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-700 text-xs font-medium">
+                      {driver.cost_center || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700 text-xs font-medium">
+                      {driver.division || '—'}
                     </td>
                     <td className="px-3 py-2 text-gray-700 text-xs font-medium">
                       {driver.date_of_appointment ? new Date(driver.date_of_appointment).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
@@ -1374,6 +1417,29 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                     onChange={(e) => setFormData({ ...formData, date_of_appointment: e.target.value })}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Cost Center</label>
+                  <input
+                    type="text"
+                    value={formData.cost_center}
+                    onChange={(e) => setFormData({ ...formData, cost_center: e.target.value })}
+                    placeholder="e.g. Finance, Registry"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Division</label>
+                  <select
+                    value={formData.division}
+                    onChange={(e) => setFormData({ ...formData, division: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:ring-2 focus:ring-blue-600 focus:border-transparent outline-none"
+                  >
+                    <option value="">Select a division</option>
+                    {divisionOptions.map((division) => (
+                      <option key={division} value={division}>{division}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">License Class</label>
@@ -1527,6 +1593,14 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                     <div className="rounded-xl bg-gray-50 p-3">
                       <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Status</p>
                       <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.status.charAt(0).toUpperCase() + viewingDriver.status.slice(1)}</p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Cost Center</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.cost_center || '—'}</p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Division</p>
+                      <p className="mt-1 text-sm font-semibold text-gray-900">{viewingDriver.division || '—'}</p>
                     </div>
                   </div>
                 </div>

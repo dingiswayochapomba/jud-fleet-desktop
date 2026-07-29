@@ -18,6 +18,9 @@ export {
   getAllDrivers,
   createDriver,
   updateDriver,
+  deleteDriver,
+  syncDriverExpiryNotifications,
+  testConnection,
   
   // Fuel
   getFuelLogsByVehicle,

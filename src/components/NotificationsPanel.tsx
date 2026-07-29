@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Trash2, CheckCircle, AlertCircle, Info, Eye, EyeOff } from 'lucide-react';
+import { X, Trash2, CheckCircle, AlertCircle, Info, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { getNotificationsForUser, markNotificationAsRead, deleteNotification } from '../lib/firebaseQueries';
 
 interface Notification {
@@ -17,6 +17,7 @@ interface NotificationsPanelProps {
   userId: string;
   isOpen: boolean;
   onClose: () => void;
+  onNotificationNavigate?: (notification: { related_entity?: string; related_id?: string }) => void;
 }
 
 const notificationTypeConfig = {
@@ -54,7 +55,7 @@ const notificationTypeConfig = {
   },
 };
 
-export default function NotificationsPanel({ userId, isOpen, onClose }: NotificationsPanelProps) {
+export default function NotificationsPanel({ userId, isOpen, onClose, onNotificationNavigate }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -121,6 +122,11 @@ export default function NotificationsPanel({ userId, isOpen, onClose }: Notifica
     : notifications;
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const handleNotificationNavigate = (notification: Notification) => {
+    onNotificationNavigate?.(notification);
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -225,12 +231,29 @@ export default function NotificationsPanel({ userId, isOpen, onClose }: Notifica
                   </div>
                   
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${notification.is_read ? 'text-gray-600' : 'font-semibold text-gray-900'}`}>
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(notification.created_at).toLocaleString()}
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleNotificationNavigate(notification)}
+                      className="w-full text-left"
+                    >
+                      <p className={`text-sm ${notification.is_read ? 'text-gray-600' : 'font-semibold text-gray-900'}`}>
+                        {notification.message}
+                      </p>
+                    </button>
+                    <div className="mt-1 flex items-center gap-2">
+                      <p className="text-xs text-gray-500">
+                        {new Date(notification.created_at).toLocaleString()}
+                      </p>
+                      {notification.related_entity === 'drivers' && notification.related_id && (
+                        <button
+                          type="button"
+                          onClick={() => handleNotificationNavigate(notification)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                        >
+                          <ExternalLink size={12} /> Open details
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">

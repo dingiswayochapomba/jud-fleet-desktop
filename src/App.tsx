@@ -19,6 +19,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { getUserProfileByFirebase } from './lib/supabaseQueries';
 import { logActivity, updateUserProfile } from './lib/firebaseQueries';
 import { canAccessUsersPage, getRoleKey, isUsersReadOnly } from './lib/access';
+import { resolveNotificationTarget } from './lib/notificationUtils';
 
 // Tab configuration
 const tabNames: { [key: string]: string } = {
@@ -43,6 +44,7 @@ function App() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [notificationTarget, setNotificationTarget] = useState<{ tab: string; detailId?: string } | null>(null);
   const lastAuthUidRef = useRef<string | null>(null);
 
   const currentUserId = user?.uid || user?.id || userProfile?.id || null;
@@ -207,6 +209,14 @@ function App() {
     console.log('✓ Login callback triggered - UI will update via auth listener');
   }, []);
 
+  const handleNotificationNavigate = useCallback((notification: { related_entity?: string; related_id?: string }) => {
+    const target = resolveNotificationTarget(notification);
+    if (!target) return;
+
+    setNotificationTarget(target);
+    setActiveTab(target.tab);
+  }, []);
+
   if (!isLoggedIn) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
@@ -235,13 +245,15 @@ function App() {
           onLogout={handleLogout}
           onSettingsClick={() => setActiveTab('settings')}
           onTabChange={(tab) => setActiveTab(tab)}
+          onNotificationNavigate={handleNotificationNavigate}
         />
 
         {/* Page Content */}
         <main className="p-4 lg:p-6 bg-gray-50 dark:bg-gray-950 min-h-screen transition-colors duration-300">
           {activeTab === 'dashboard' && <DashboardContent />}
-          {activeTab === 'vehicles' && <VehiclesManagement />}
-          {activeTab === 'drivers' && <DriversManagement />}
+          {activeTab === 'vehicles' && <VehiclesManagement highlightVehicleId={notificationTarget?.tab === 'vehicles' ? notificationTarget.detailId : undefined} />}
+          {activeTab === 'drivers' && <DriversManagement currentUserId={currentUserId} highlightDriverId={notificationTarget?.tab === 'drivers' ? notificationTarget.detailId : undefined} />}
+          {activeTab === 'maintenance' && <MaintenanceManagement highlightRecordId={notificationTarget?.tab === 'maintenance' ? notificationTarget.detailId : undefined} />}
           {activeTab === 'users' && (canAccessUsersPage(userProfile?.role) ? (
             <UsersManagement
               currentRole={getRoleKey(userProfile?.role)}
@@ -259,7 +271,7 @@ function App() {
           {activeTab === 'insurance' && <InsuranceManagement />}
           {activeTab === 'disposal' && <DisposalTracking />}
           {activeTab === 'reports' && <ReportsPage />}
-          {activeTab === 'notifications' && currentUserId && <NotificationsPage userId={currentUserId} />}
+          {activeTab === 'notifications' && currentUserId && <NotificationsPage userId={currentUserId} onNavigateNotification={handleNotificationNavigate} />}
           {activeTab === 'settings' && user && (
             <SettingsPage 
               userProfile={userProfile}

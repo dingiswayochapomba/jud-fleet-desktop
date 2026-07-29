@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Trash2, CheckCircle, AlertCircle, Info, Eye, Search, MoreVertical, X } from 'lucide-react';
+import { Bell, Trash2, CheckCircle, AlertCircle, Info, Eye, Search, MoreVertical, X, ExternalLink } from 'lucide-react';
 import { getNotificationsForUser, markNotificationAsRead, deleteNotification } from '../lib/firebaseQueries';
 
 interface Notification {
@@ -15,6 +15,7 @@ interface Notification {
 
 interface NotificationsPageProps {
   userId: string;
+  onNavigateNotification?: (notification: { related_entity?: string; related_id?: string }) => void;
 }
 
 const notificationTypeConfig = {
@@ -56,7 +57,7 @@ const notificationTypeConfig = {
   },
 };
 
-export default function NotificationsPage({ userId }: NotificationsPageProps) {
+export default function NotificationsPage({ userId, onNavigateNotification }: NotificationsPageProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +132,10 @@ export default function NotificationsPage({ userId }: NotificationsPageProps) {
     if (searchTerm && !n.message.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
   });
+
+  const handleNotificationNavigate = (notification: Notification) => {
+    onNavigateNotification?.(notification);
+  };
 
   const stats = {
     total: notifications.length,
@@ -294,11 +299,17 @@ export default function NotificationsPage({ userId }: NotificationsPageProps) {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
-                        <p className={`text-sm font-medium ${
-                          !notification.is_read ? 'text-gray-900' : 'text-gray-600'
-                        }`}>
-                          {notification.message}
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleNotificationNavigate(notification)}
+                          className="w-full text-left"
+                        >
+                          <p className={`text-sm font-medium ${
+                            !notification.is_read ? 'text-gray-900' : 'text-gray-600'
+                          }`}>
+                            {notification.message}
+                          </p>
+                        </button>
                         <div className="flex items-center gap-2 mt-1">
                           <span className={`text-xs px-2 py-1 rounded-full font-semibold ${config.badge} ${config.textColor}`}>
                             {config.label}
@@ -307,6 +318,15 @@ export default function NotificationsPage({ userId }: NotificationsPageProps) {
                             {new Date(notification.created_at).toLocaleString()}
                           </p>
                         </div>
+                        {notification.related_entity === 'drivers' && notification.related_id && (
+                          <button
+                            type="button"
+                            onClick={() => handleNotificationNavigate(notification)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                          >
+                            <ExternalLink size={12} /> Open details
+                          </button>
+                        )}
                       </div>
 
                       {/* Dropdown Menu */}

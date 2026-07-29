@@ -30,13 +30,13 @@ interface SidebarProps {
 
 const baseMenuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'vehicles', label: 'Vehicles', icon: Truck },
   { id: 'drivers', label: 'Drivers', icon: Users },
-  { id: 'users', label: 'Users', icon: Users2 },
-  { id: 'fuel', label: 'Fuel Tracking', icon: Zap },
-  { id: 'fuel_analytics', label: 'Analytics', icon: TrendingUp },
+  { id: 'vehicles', label: 'Vehicles', icon: Truck },
   { id: 'maintenance', label: 'Maintenance', icon: Wrench },
   { id: 'insurance', label: 'Insurance', icon: Shield },
+  { id: 'fuel', label: 'Fuel Tracking', icon: Zap },
+  { id: 'fuel_analytics', label: 'Analytics', icon: TrendingUp },
+  { id: 'users', label: 'Users', icon: Users2 },
   { id: 'disposal', label: 'Disposal', icon: Trash2 },
   { id: 'reports', label: 'Reports', icon: FileText },
 ];

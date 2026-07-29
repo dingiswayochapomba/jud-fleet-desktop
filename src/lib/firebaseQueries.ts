@@ -12,8 +12,11 @@ import {
   where,
 } from 'firebase/firestore';
 import { firestoreDb } from './firebase';
+import { buildDriverExpiryNotifications } from './notificationUtils';
 
 type Result<T> = { data: T | null; error: any };
+
+const offlineCache = new Map<string, any[]>();
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -71,6 +74,8 @@ export function buildDriverPayload(input: Record<string, any> = {}) {
     date_of_birth: input.date_of_birth || '',
     date_of_appointment: input.date_of_appointment || '',
     license_class: (input.license_class || '').trim(),
+    cost_center: (input.cost_center || '').trim(),
+    division: (input.division || '').trim(),
     created_at: input.created_at || nowIso(),
   };
 
@@ -81,13 +86,54 @@ function withId<T extends Record<string, any>>(id: string, value: any): T {
   return { id, ...(value || {}) } as T;
 }
 
+function getOfflineCacheKey(name: string) {
+  return `offline:${name}`;
+}
+
+export function setCachedCollection(name: string, data: any[]) {
+  offlineCache.set(getOfflineCacheKey(name), data);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(getOfflineCacheKey(name), JSON.stringify(data));
+  }
+}
+
+export function getCachedCollection<T>(name: string): T[] | null {
+  const key = getOfflineCacheKey(name);
+  if (offlineCache.has(key)) {
+    return offlineCache.get(key) as T[];
+  }
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as T[];
+        offlineCache.set(key, parsed);
+        return parsed;
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
+  }
+  return null;
+}
+
+function createOfflineResult<T>(name: string, fallback?: T[] | null): Result<T[]> {
+  const cached = getCachedCollection<T>(name) ?? fallback ?? [];
+  if (cached && cached.length > 0) {
+    return { data: cached, error: null };
+  }
+  return { data: [], error: { message: 'Offline mode: no cached data available', code: 'offline' } };
+}
+
 async function listDocs<T>(name: string, constraints: any[] = []): Promise<Result<T[]>> {
   try {
     const q = query(collection(firestoreDb, name), ...constraints);
     const snap = await getDocs(q);
-    return { data: snap.docs.map((d) => withId<T>(d.id, d.data())), error: null };
+    const items = snap.docs.map((d) => withId<T>(d.id, d.data()));
+    setCachedCollection(name, items as any[]);
+    return { data: items, error: null };
   } catch (error) {
-    return { data: null, error };
+    return createOfflineResult<T>(name);
   }
 }
 
@@ -230,6 +276,23 @@ export async function deleteInsurancePolicy(policyId: string) {
   return removeOne('insurance', policyId);
 }
 
+export async function getAllMaintenanceRecords() {
+  return listDocs<any>('maintenance_logs', [orderBy('service_date', 'desc')]);
+}
+export async function createMaintenanceRecord(recordData: any) {
+  return addOne<any>('maintenance_logs', recordData);
+}
+export async function updateMaintenanceRecord(recordId: string, updates: any) {
+  return updateOne<any>('maintenance_logs', recordId, updates);
+}
+export async function deleteMaintenanceRecord(recordId: string) {
+  return removeOne('maintenance_logs', recordId);
+}
+
+export async function getAllFuelLogs() {
+  return listDocs<any>('fuel_logs', [orderBy('refuel_date', 'desc')]);
+}
+
 export async function getFuelLogsByVehicle(vehicleId: string) {
   // Query without orderBy to avoid composite index requirement
   // Sorting is done in-memory after fetching
@@ -268,6 +331,31 @@ export async function getNotificationsForUser(userId: string, unreadOnly = false
 export async function createNotification(notificationData: any) {
   return addOne<any>('notifications', notificationData);
 }
+
+export async function syncDriverExpiryNotifications(userId: string, drivers: any[]) {
+  if (!userId) return { data: [], error: null };
+
+  try {
+    const existing = await listDocs<any>('notifications', [where('user_id', '==', userId)]);
+    const existingIds = new Set(
+      (existing.data || [])
+        .filter((item: any) => item.related_entity === 'drivers' && item.related_id)
+        .map((item: any) => item.related_id)
+    );
+    const generated = buildDriverExpiryNotifications(userId, drivers).filter((item) => !existingIds.has(item.related_id));
+
+    const created = [] as any[];
+    for (const notification of generated) {
+      const result = await addOne<any>('notifications', notification);
+      if (!result.error) created.push(result.data);
+    }
+
+    return { data: created, error: null };
+  } catch (error) {
+    return { data: [], error };
+  }
+}
+
 export async function markNotificationAsRead(notificationId: string) {
   return updateOne<any>('notifications', notificationId, { is_read: true });
 }

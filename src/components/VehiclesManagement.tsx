@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Truck, BarChart3, Search, CheckCircle, Activity, Wrench, AlertTriangle, Recycle, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { getAllVehicles, createVehicle, updateVehicle, deleteVehicle } from '../lib/firebaseQueries';
+import { getAllVehicles, createVehicle, updateVehicle, deleteVehicle } from '../lib/supabaseQueries';
 
 // ============= INTERFACES =============
 interface Vehicle {
@@ -17,6 +17,8 @@ interface Vehicle {
   engine_number: string;
   purchase_date: string;
   insurance_expiry: string;
+  cost_center?: string;
+  division?: string;
   created_at: string;
 }
 
@@ -31,9 +33,17 @@ const statusColors: { [key: string]: { bg: string; text: string; border: string;
 
 const fuelTypes = ['diesel', 'petrol', 'hybrid', 'electric'];
 const statuses = ['available', 'in_use', 'maintenance', 'broken', 'disposed'];
+const divisionOptions = [
+  'Supreme Court of Appeal',
+  'High Court – General Division',
+  'High Court – Commercial Division',
+  'Industrial Relations Court',
+  'Subordinate Courts',
+  'Local and Traditional Courts',
+];
 
 // ============= MAIN COMPONENT =============
-export default function VehiclesManagement() {
+export default function VehiclesManagement({ highlightVehicleId }: { highlightVehicleId?: string }) {
   // ===== STATE DECLARATIONS =====
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,9 +74,17 @@ export default function VehiclesManagement() {
     engine_number: '',
     purchase_date: '',
     insurance_expiry: '',
+    cost_center: '',
+    division: '',
   });
 
   // ===== LOAD VEHICLES ON MOUNT =====
+  useEffect(() => {
+    if (highlightVehicleId) {
+      setViewingId(highlightVehicleId);
+    }
+  }, [highlightVehicleId]);
+
   useEffect(() => {
     let isMounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -154,6 +172,8 @@ export default function VehiclesManagement() {
       engine_number: '',
       purchase_date: '',
       insurance_expiry: '',
+      cost_center: '',
+      division: '',
     });
     setSubmitError(null);
   };
@@ -161,7 +181,11 @@ export default function VehiclesManagement() {
   const handleOpenForm = (vehicle?: Vehicle) => {
     if (vehicle) {
       setEditingId(vehicle.id);
-      setFormData(vehicle);
+      setFormData({
+        ...vehicle,
+        cost_center: vehicle.cost_center || '',
+        division: vehicle.division || '',
+      });
     } else {
       setEditingId(null);
       resetForm();
@@ -319,7 +343,9 @@ export default function VehiclesManagement() {
       searchTerm === '' ||
       v.registration_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.make.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.model.toLowerCase().includes(searchTerm.toLowerCase())
+      v.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (v.cost_center || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (v.division || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
   // ===== ANALYTICS =====
@@ -593,12 +619,6 @@ export default function VehiclesManagement() {
 
           {/* ===== VEHICLES TABLE ===== */}
           <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Vehicles on Board ({filtered.length} of {vehicles.length})
-              </h2>
-            </div>
-
             {filtered.length === 0 ? (
               <div className="p-12 text-center text-gray-500">
                 {vehicles.length === 0 ? (
@@ -624,7 +644,9 @@ export default function VehiclesManagement() {
                       <th className="px-6 py-3 text-left font-bold text-gray-900">📅 Year</th>
                       <th className="px-6 py-3 text-left font-bold text-gray-900">🛣️ Mileage</th>
                       <th className="px-6 py-3 text-left font-bold text-gray-900">⛽ Fuel Type</th>
-                      <th className="px-6 py-3 text-left font-bold text-gray-900">🎯 Status</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">�️ Cost Center</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">🏛️ Division</th>
+                      <th className="px-6 py-3 text-left font-bold text-gray-900">�🎯 Status</th>
                       <th className="px-6 py-3 text-center font-bold text-gray-900">⚙️ Actions</th>
                     </tr>
                   </thead>
@@ -638,6 +660,8 @@ export default function VehiclesManagement() {
                           <td className="px-6 py-4 text-sm text-gray-600">{vehicle.year}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{vehicle.mileage.toLocaleString()} km</td>
                           <td className="px-6 py-4 text-sm text-gray-600 capitalize">{vehicle.fuel_type}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.cost_center || '—'}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{vehicle.division || '—'}</td>
                           <td className="px-6 py-4">
                             <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${colors.badge}`}>
                               {vehicle.status.replace(/_/g, ' ')}
@@ -738,7 +762,6 @@ export default function VehiclesManagement() {
                     value={formData.registration_number || ''}
                     onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
-                    placeholder="e.g., MZ001ABC"
                   />
                 </div>
 
@@ -752,7 +775,6 @@ export default function VehiclesManagement() {
                     value={formData.make || ''}
                     onChange={(e) => setFormData({ ...formData, make: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
-                    placeholder="e.g., Toyota"
                   />
                 </div>
 
@@ -766,7 +788,6 @@ export default function VehiclesManagement() {
                     value={formData.model || ''}
                     onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
-                    placeholder="e.g., Land Cruiser"
                   />
                 </div>
 
@@ -841,8 +862,38 @@ export default function VehiclesManagement() {
                     value={formData.chassis_number || ''}
                     onChange={(e) => setFormData({ ...formData, chassis_number: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
-                    placeholder="VIN/Chassis"
                   />
+                </div>
+
+                {/* Cost Center */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1">
+                    Cost Center
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.cost_center || ''}
+                    onChange={(e) => setFormData({ ...formData, cost_center: e.target.value })}
+                    placeholder="e.g. Registry, Finance"
+                    className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
+                  />
+                </div>
+
+                {/* Division */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-900 mb-1">
+                    Division
+                  </label>
+                  <select
+                    value={formData.division || ''}
+                    onChange={(e) => setFormData({ ...formData, division: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
+                  >
+                    <option value="">Select a division</option>
+                    {divisionOptions.map((division) => (
+                      <option key={division} value={division}>{division}</option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Engine Number */}
@@ -855,7 +906,6 @@ export default function VehiclesManagement() {
                     value={formData.engine_number || ''}
                     onChange={(e) => setFormData({ ...formData, engine_number: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EA7B7B]"
-                    placeholder="Engine serial"
                   />
                 </div>
 
@@ -1003,15 +1053,18 @@ export default function VehiclesManagement() {
                     {/* INFO TAB */}
                     {detailsTab === 'info' && (
                       <>
-                        {/* Status Badge & Title */}
-                    <div className="flex items-start justify-between pb-3 border-b border-gray-200">
-                      <div className="flex-1">
-                        <h3 className="text-base font-bold text-gray-900">{vehicle.registration_number}</h3>
-                        <p className="text-xs text-gray-600 mt-0.5">{vehicle.make} {vehicle.model} • {vehicle.year}</p>
+                        {/* Vehicle Overview */}
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Vehicle Overview</p>
+                          <p className="mt-1 text-sm font-semibold text-gray-900">{vehicle.registration_number}</p>
+                          <p className="text-xs text-gray-600">{vehicle.make} {vehicle.model} • {vehicle.year}</p>
+                        </div>
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${colors.badge}`}>
+                          {vehicle.status.replace(/_/g, ' ').toUpperCase()}
+                        </span>
                       </div>
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ml-2 ${colors.badge}`}>
-                        {vehicle.status.replace(/_/g, ' ').toUpperCase()}
-                      </span>
                     </div>
 
                     {/* Key Information - Highlighted */}
@@ -1056,6 +1109,20 @@ export default function VehiclesManagement() {
                           <span className="text-xs font-semibold text-gray-900">
                             {vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry).toLocaleDateString('en-GB') : '—'}
                           </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide">🏷️ Organizational</h4>
+                      <div className="grid grid-cols-1 gap-1.5 space-y-0">
+                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
+                          <span className="text-xs text-gray-600">Cost Center</span>
+                          <span className="text-xs font-semibold text-gray-900 text-right">{vehicle.cost_center || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
+                          <span className="text-xs text-gray-600">Division</span>
+                          <span className="text-xs font-semibold text-gray-900 text-right">{vehicle.division || '—'}</span>
                         </div>
                       </div>
                     </div>

@@ -11,13 +11,15 @@ interface HeaderProps {
   onLogout?: () => void;
   onSettingsClick?: () => void;
   onTabChange?: (tab: string) => void;
+  onNotificationNavigate?: (notification: { related_entity?: string; related_id?: string }) => void;
 }
 
-export default function Header({ userName, userRole, activeTabLabel, userId, onLogout, onSettingsClick, onTabChange }: HeaderProps) {
+export default function Header({ userName, userRole, activeTabLabel, userId, onLogout, onSettingsClick, onTabChange, onNotificationNavigate }: HeaderProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   // Initialize theme from localStorage on mount
   useEffect(() => {
@@ -36,6 +38,16 @@ export default function Header({ userName, userRole, activeTabLabel, userId, onL
         document.documentElement.classList.add('dark');
       }
     }
+  }, []);
+
+  useEffect(() => {
+    const handleOnlineStatus = () => setIsOffline(!navigator.onLine);
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOnlineStatus);
+    return () => {
+      window.removeEventListener('online', handleOnlineStatus);
+      window.removeEventListener('offline', handleOnlineStatus);
+    };
   }, []);
 
   // Apply theme whenever isDarkMode changes
@@ -86,6 +98,11 @@ export default function Header({ userName, userRole, activeTabLabel, userId, onL
 
   return (
     <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20 transition-all duration-300">
+      {isOffline && (
+        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+          Offline mode • showing the latest cached data
+        </div>
+      )}
       <div className="px-4 py-3 lg:ml-0">
         <div className="flex items-center justify-between gap-3">
           {/* Left: Title */}
@@ -119,6 +136,7 @@ export default function Header({ userName, userRole, activeTabLabel, userId, onL
                 userId={userId}
                 isOpen={isNotificationsOpen}
                 onClose={() => setIsNotificationsOpen(false)}
+                onNotificationNavigate={onNotificationNavigate}
               />
             )}
 

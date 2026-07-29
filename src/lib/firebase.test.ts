@@ -1,6 +1,35 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { firebaseApp, firebaseAuth } from './firebase';
-import { buildActivityLogPayload, buildDriverPayload, buildUserProfilePayload } from './firebaseQueries';
+import { buildActivityLogPayload, buildDriverPayload, buildUserProfilePayload, getCachedCollection, setCachedCollection } from './firebaseQueries';
+
+function installLocalStorageStub() {
+  const store = new Map<string, string>();
+  const storage = {
+    getItem(key: string) {
+      return store.has(key) ? store.get(key)! : null;
+    },
+    setItem(key: string, value: string) {
+      store.set(key, value);
+    },
+    removeItem(key: string) {
+      store.delete(key);
+    },
+    clear() {
+      store.clear();
+    },
+    key(index: number) {
+      return Array.from(store.keys())[index] ?? null;
+    },
+    get length() {
+      return store.size;
+    },
+  };
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: storage,
+  });
+}
 
 describe('firebase bootstrap', () => {
   it('initializes app and auth instances', () => {
@@ -80,5 +109,19 @@ describe('buildDriverPayload', () => {
     expect(payload.date_of_appointment).toBe('2024-01-15');
     expect(payload.license_class).toBe('B');
     expect(payload.created_at).toBeTruthy();
+  });
+});
+
+describe('offline cache helpers', () => {
+  beforeEach(() => {
+    installLocalStorageStub();
+    localStorage.clear();
+  });
+
+  it('stores and reads cached collection data for offline use', () => {
+    const sample = [{ id: '1', name: 'Jane' }];
+    setCachedCollection('drivers', sample);
+
+    expect(getCachedCollection('drivers')).toEqual(sample);
   });
 });

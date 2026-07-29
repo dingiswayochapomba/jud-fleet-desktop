@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, BarChart3, TrendingUp, Filter, RefreshCw, AlertCircle, DollarSign, Users, Truck, PieChart, Star, List } from 'lucide-react';
 import { BarChart, Bar, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend, ComposedChart, Line, PieChart as RechartsPie } from 'recharts';
+import {
+  getAllDrivers,
+  getAllFuelLogs,
+  getAllInsurance,
+  getAllMaintenanceRecords,
+  getAllVehicles,
+} from '../lib/firebaseQueries';
+import { buildFleetReportData } from '../lib/reportData';
 
 // Custom Tooltip Components (consistent with Dashboard)
 const CustomMonthlyTooltip = ({ active, payload }: any) => {
@@ -94,52 +102,63 @@ export default function ReportsPage() {
   const [dateRange, setDateRange] = useState({ from: '2025-11-01', to: '2026-01-09' });
   const [filterVehicle, setFilterVehicle] = useState('all');
   const [filterDriver, setFilterDriver] = useState('all');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [vehicleStats, setVehicleStats] = useState<VehicleStats[]>([]);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [driverStats, setDriverStats] = useState<DriverStats[]>([]);
+  const [costBreakdownData, setCostBreakdownData] = useState<Array<{ name: string; value: number; color: string }>>([]);
+  const [vehicleStatusData, setVehicleStatusData] = useState<Array<{ name: string; value: number; color: string }>>([]);
 
-  // Mock data
-  const [vehicleStats] = useState<VehicleStats[]>([
-    { id: '1', registration: 'JJ-16-AB', totalMaintenance: 45000, totalFuel: 85000, totalCost: 130000, status: 'active', mileage: 45200 },
-    { id: '2', registration: 'JJ-16-AC', totalMaintenance: 32000, totalFuel: 92000, totalCost: 124000, status: 'active', mileage: 62600 },
-    { id: '3', registration: 'JJ-16-AD', totalMaintenance: 22000, totalFuel: 78000, totalCost: 100000, status: 'active', mileage: 28100 },
-    { id: '4', registration: 'JJ-16-AE', totalMaintenance: 15000, totalFuel: 105000, totalCost: 120000, status: 'active', mileage: 78700 },
-    { id: '5', registration: 'JJ-16-AF', totalMaintenance: 38000, totalFuel: 88000, totalCost: 126000, status: 'inactive', mileage: 95200 },
-  ]);
+  useEffect(() => {
+    void loadReportData();
+  }, []);
 
-  const [monthlyData] = useState<MonthlyData[]>([
-    { month: 'Nov', maintenance: 75000, fuel: 125000, insurance: 35000, total: 235000 },
-    { month: 'Dec', maintenance: 102000, fuel: 155000, insurance: 35000, total: 292000 },
-    { month: 'Jan', maintenance: 152000, fuel: 170000, insurance: 35000, total: 357000 },
-  ]);
+  const loadReportData = async () => {
+    setLoading(true);
+    setError(null);
 
-  const [driverStats] = useState<DriverStats[]>([
-    { id: '1', name: 'John Banda', vehiclesAssigned: 2, tripsCompleted: 45, averageRating: 4.8, status: 'active' },
-    { id: '2', name: 'Grace Mwale', vehiclesAssigned: 1, tripsCompleted: 38, averageRating: 4.6, status: 'active' },
-    { id: '3', name: 'Peter Chisaka', vehiclesAssigned: 2, tripsCompleted: 52, averageRating: 4.9, status: 'active' },
-    { id: '4', name: 'Mercy Phiri', vehiclesAssigned: 1, tripsCompleted: 35, averageRating: 4.5, status: 'active' },
-    { id: '5', name: 'Samuel Kachale', vehiclesAssigned: 2, tripsCompleted: 48, averageRating: 4.7, status: 'active' },
-  ]);
+    try {
+      const [vehiclesResult, driversResult, maintenanceResult, fuelResult, insuranceResult] = await Promise.all([
+        getAllVehicles(),
+        getAllDrivers(),
+        getAllMaintenanceRecords(),
+        getAllFuelLogs(),
+        getAllInsurance(),
+      ]);
 
-  // Calculate totals
+      if (vehiclesResult.error || driversResult.error || maintenanceResult.error || fuelResult.error || insuranceResult.error) {
+        throw new Error('Unable to load report data from the database');
+      }
+
+      const reportData = buildFleetReportData({
+        vehicles: vehiclesResult.data || [],
+        drivers: driversResult.data || [],
+        maintenanceRecords: maintenanceResult.data || [],
+        fuelLogs: fuelResult.data || [],
+        insurancePolicies: insuranceResult.data || [],
+      });
+
+      setVehicleStats(reportData.vehicleStats);
+      setMonthlyData(reportData.monthlyData);
+      setDriverStats(reportData.driverStats);
+      setCostBreakdownData(reportData.costBreakdownData);
+      setVehicleStatusData(reportData.vehicleStatusData);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load report data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const totalVehicles = vehicleStats.length;
-  const activeVehicles = vehicleStats.filter(v => v.status === 'active').length;
+  const activeVehicles = vehicleStats.filter(v => v.status === 'active' || v.status === 'available' || v.status === 'in_use').length;
   const totalCost = vehicleStats.reduce((sum, v) => sum + v.totalCost, 0);
-  const avgCostPerVehicle = totalCost / totalVehicles;
+  const avgCostPerVehicle = totalVehicles > 0 ? totalCost / totalVehicles : 0;
   const totalDrivers = driverStats.length;
   const totalTrips = driverStats.reduce((sum, d) => sum + d.tripsCompleted, 0);
-  const avgDriverRating = (driverStats.reduce((sum, d) => sum + d.averageRating, 0) / totalDrivers).toFixed(1);
-
-  // Cost breakdown data
-  const costBreakdownData = [
-    { name: 'Maintenance', value: vehicleStats.reduce((sum, v) => sum + v.totalMaintenance, 0), color: '#f59e0b' },
-    { name: 'Fuel', value: vehicleStats.reduce((sum, v) => sum + v.totalFuel, 0), color: '#3b82f6' },
-    { name: 'Insurance', value: 105000, color: '#10b981' },
-  ];
-
-  // Vehicle status distribution
-  const vehicleStatusData = [
-    { name: 'Active', value: activeVehicles, color: '#10b981' },
-    { name: 'Inactive', value: vehicleStats.filter(v => v.status === 'inactive').length, color: '#ef4444' },
-  ];
+  const avgDriverRating = totalDrivers > 0 ? (driverStats.reduce((sum, d) => sum + d.averageRating, 0) / totalDrivers).toFixed(1) : '0.0';
 
   const handleExportPDF = () => {
     alert('PDF export functionality will be integrated with your backend');
@@ -162,9 +181,16 @@ export default function ReportsPage() {
   };
 
   const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => setLoading(false), 1000);
+    void loadReportData();
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-6">
@@ -205,6 +231,12 @@ export default function ReportsPage() {
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow p-6">
