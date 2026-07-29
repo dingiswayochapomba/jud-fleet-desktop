@@ -252,7 +252,7 @@ function App() {
         <main className="p-4 lg:p-6 bg-gray-50 dark:bg-gray-950 min-h-screen transition-colors duration-300">
           {activeTab === 'dashboard' && <DashboardContent />}
           {activeTab === 'vehicles' && <VehiclesManagement highlightVehicleId={notificationTarget?.tab === 'vehicles' ? notificationTarget.detailId : undefined} />}
-          {activeTab === 'drivers' && <DriversManagement currentUserId={currentUserId} highlightDriverId={notificationTarget?.tab === 'drivers' ? notificationTarget.detailId : undefined} />}
+          {activeTab === 'drivers' && <DriversManagement currentUserId={currentUserId} userRole={getRoleKey(userProfile?.role)} highlightDriverId={notificationTarget?.tab === 'drivers' ? notificationTarget.detailId : undefined} />}
           {activeTab === 'maintenance' && <MaintenanceManagement highlightRecordId={notificationTarget?.tab === 'maintenance' ? notificationTarget.detailId : undefined} />}
           {activeTab === 'users' && (canAccessUsersPage(userProfile?.role) ? (
             <UsersManagement

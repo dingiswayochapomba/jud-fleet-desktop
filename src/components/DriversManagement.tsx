@@ -5,6 +5,7 @@ import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import Swal from 'sweetalert2';
 import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, syncDriverRetirementNotifications, markDriverRetired, testConnection, updateDriver } from '../lib/supabaseQueries';
+import { canRenewLicense } from '../lib/access';
 
 type DriverStatus = 'active' | 'inactive' | 'suspended' | 'retired';
 interface Driver {
@@ -133,7 +134,7 @@ function normalizeDriver(record: any): Driver {
   };
 }
 
-export default function DriversManagement({ currentUserId, highlightDriverId }: { currentUserId?: string | null; highlightDriverId?: string }) {
+export default function DriversManagement({ currentUserId, userRole, highlightDriverId }: { currentUserId?: string | null; userRole?: string | null; highlightDriverId?: string }) {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1380,17 +1381,19 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                               >
                                 <Edit2 size={14} /> Edit
                               </button>
-                                  <button
-                                    onClick={() => {
-                                      setRenewingId(driver.id);
-                                      setRenewingExpiry(driver.license_expiry || '');
-                                      setRenewingLicenseNumber(driver.license_number || '');
-                                      setOpenActionMenuId(null);
-                                    }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700"
-                                  >
-                                    <ShieldCheck size={14} /> Renew License
-                                  </button>
+                                  {canRenewLicense(userRole) && (
+                                    <button
+                                      onClick={() => {
+                                        setRenewingId(driver.id);
+                                        setRenewingExpiry(driver.license_expiry || '');
+                                        setRenewingLicenseNumber(driver.license_number || '');
+                                        setOpenActionMenuId(null);
+                                      }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-700"
+                                    >
+                                      <ShieldCheck size={14} /> Renew License
+                                    </button>
+                                  )}
                               <button
                                 onClick={() => {
                                   setDeleteConfirm(driver.id);
@@ -1757,6 +1760,19 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
               >
                 Edit Driver
               </button>
+              {canRenewLicense(userRole) && (
+                <button
+                  onClick={() => {
+                    setRenewingId(viewingDriver.id);
+                    setRenewingExpiry(viewingDriver.license_expiry || '');
+                    setRenewingLicenseNumber(viewingDriver.license_number || '');
+                    setViewingId(null);
+                  }}
+                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:brightness-110 transition-all font-medium text-sm shadow-sm"
+                >
+                  Renew License
+                </button>
+              )}
               <button
                 onClick={() => setDeleteConfirm(viewingDriver.id)}
                 className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"

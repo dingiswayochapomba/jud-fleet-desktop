@@ -32,3 +32,8 @@ export function canViewAllModules(role?: AppRole): boolean {
 export function canBypassRestrictedFeatures(role?: AppRole): boolean {
   return getRoleKey(role) === 'court_administrator' || getRoleKey(role) === 'system_admin';
 }
+
+export function canRenewLicense(role?: AppRole): boolean {
+  const key = getRoleKey(role);
+  return key === 'transport_officer' || key === 'system_admin';
+}
