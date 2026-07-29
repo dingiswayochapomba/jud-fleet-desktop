@@ -590,6 +590,53 @@ export default function DriversManagement({ currentUserId, userRole, highlightDr
         </div>
       )}
 
+      {/* Retired Drivers Notifications */}
+      {drivers.filter((d) => d.status === 'retired').length > 0 && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/80 p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <BadgeCheck size={18} className="text-violet-600" />
+              <div>
+                <h3 className="text-sm font-semibold text-violet-900">Retired drivers</h3>
+                <p className="text-xs text-violet-700">Drivers who have reached retirement age</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
+              {drivers.filter((d) => d.status === 'retired').length} retired
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {drivers.filter((d) => d.status === 'retired').slice(0, 6).map((driver) => {
+              const dob = driver.date_of_birth ? new Date(driver.date_of_birth) : null;
+              let age: number | null = null;
+              if (dob && !Number.isNaN(dob.getTime())) {
+                const today = new Date();
+                age = today.getFullYear() - dob.getFullYear();
+                const m = today.getMonth() - dob.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age -= 1;
+              }
+              return (
+                <button
+                  key={driver.id}
+                  type="button"
+                  onClick={() => setViewingId(driver.id)}
+                  className="flex w-full items-center justify-between rounded-lg border border-violet-200 bg-white/70 px-3 py-2 text-left transition-all hover:border-violet-300 hover:bg-violet-100/70"
+                >
+                  <div className="flex items-center gap-2">
+                    <BadgeCheck size={16} className="text-violet-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{driver.name}</p>
+                      <p className="text-xs text-gray-600">{driver.license_number || 'No license'}</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full px-2 py-1 text-[11px] font-semibold bg-violet-100 text-violet-700">{age ?? '—'}y</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* KPI Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Drivers */}
