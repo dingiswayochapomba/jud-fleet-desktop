@@ -12,7 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { firestoreDb } from './firebase';
-import { buildDriverExpiryNotifications } from './notificationUtils';
+import { buildDriverExpiryNotifications, buildDriverRetirementNotifications } from './notificationUtils';
 
 type Result<T> = { data: T | null; error: any };
 
@@ -353,6 +353,40 @@ export async function syncDriverExpiryNotifications(userId: string, drivers: any
     return { data: created, error: null };
   } catch (error) {
     return { data: [], error };
+  }
+}
+
+export async function syncDriverRetirementNotifications(userId: string, drivers: any[]) {
+  if (!userId) return { data: [], error: null };
+
+  try {
+    const existing = await listDocs<any>('notifications', [where('user_id', '==', userId)]);
+    const existingIds = new Set(
+      (existing.data || [])
+        .filter((item: any) => item.related_entity === 'drivers' && item.related_id)
+        .map((item: any) => item.related_id)
+    );
+    const generated = buildDriverRetirementNotifications(userId, drivers).filter((item) => !existingIds.has(item.related_id));
+
+    const created = [] as any[];
+    for (const notification of generated) {
+      const result = await addOne<any>('notifications', notification);
+      if (!result.error) created.push(result.data);
+    }
+
+    return { data: created, error: null };
+  } catch (error) {
+    return { data: [], error };
+  }
+}
+
+export async function markDriverRetired(driverId: string) {
+  try {
+    await updateDoc(doc(firestoreDb, 'drivers', driverId), { status: 'retired' });
+    const latest = await getDoc(doc(firestoreDb, 'drivers', driverId));
+    return { data: withId<any>(latest.id, latest.data()), error: null };
+  } catch (error) {
+    return { data: null, error };
   }
 }
 

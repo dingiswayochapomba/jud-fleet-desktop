@@ -20,6 +20,8 @@ export {
   updateDriver,
   deleteDriver,
   syncDriverExpiryNotifications,
+  syncDriverRetirementNotifications,
+  markDriverRetired,
   testConnection,
   
   // Fuel

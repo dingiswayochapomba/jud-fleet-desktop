@@ -4,9 +4,9 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, 
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import Swal from 'sweetalert2';
-import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, testConnection, updateDriver } from '../lib/supabaseQueries';
+import { createDriver, deleteDriver, getAllDrivers, syncDriverExpiryNotifications, syncDriverRetirementNotifications, testConnection, updateDriver } from '../lib/supabaseQueries';
 
-type DriverStatus = 'active' | 'inactive' | 'suspended';
+type DriverStatus = 'active' | 'inactive' | 'suspended' | 'retired';
 interface Driver {
   id: string;
   name: string;
@@ -39,6 +39,7 @@ const statusColors: Record<string, { badge: string; bg: string; text: string; ic
   active: { badge: 'bg-emerald-100 text-emerald-800', bg: 'from-emerald-50 to-green-50', text: 'text-emerald-600', icon: 'emerald' },
   inactive: { badge: 'bg-gray-100 text-gray-800', bg: 'from-gray-50 to-slate-50', text: 'text-gray-600', icon: 'gray' },
   suspended: { badge: 'bg-red-100 text-red-800', bg: 'from-red-50 to-rose-50', text: 'text-red-600', icon: 'red' },
+  retired: { badge: 'bg-violet-100 text-violet-800', bg: 'from-violet-50 to-white', text: 'text-violet-600', icon: 'violet' },
 };
 
 const stockDriverImages = [
@@ -94,20 +95,36 @@ function getDriverExpiryBucket(driver: Driver): 'expired' | 'soon' | 'valid' {
 
 function normalizeDriverStatus(status?: string): DriverStatus {
   const normalized = (status || '').toString().trim().toLowerCase();
-  if (normalized === 'retired' || normalized === 'inactive') return 'inactive';
+  if (normalized === 'retired') return 'retired';
+  if (normalized === 'inactive') return 'inactive';
   if (normalized === 'suspended') return 'suspended';
   return 'active';
 }
 
 function normalizeDriver(record: any): Driver {
+  const dob = record?.date_of_birth || '';
+  let age: number | null = null;
+  if (dob) {
+    const d = new Date(dob);
+    if (!Number.isNaN(d.getTime())) {
+      const today = new Date();
+      age = today.getFullYear() - d.getFullYear();
+      const m = today.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age -= 1;
+    }
+  }
+
+  // If age indicates retirement, prefer that status for display
+  const computedStatus = age !== null && age >= 65 ? 'retired' : normalizeDriverStatus(record?.status);
+
   return {
     id: record?.id || '',
     name: record?.name || 'Unnamed Driver',
     license_number: record?.license_number || '',
     phone: record?.phone || '',
     license_expiry: record?.license_expiry || '',
-    status: normalizeDriverStatus(record?.status),
-    date_of_birth: record?.date_of_birth || '',
+    status: computedStatus,
+    date_of_birth: dob,
     date_of_appointment: record?.date_of_appointment || '',
     license_class: record?.license_class || '',
     cost_center: record?.cost_center || '',
@@ -164,6 +181,12 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
 
       if (normalizedDrivers.length > 0 && currentUserId) {
         await syncDriverExpiryNotifications(currentUserId, normalizedDrivers);
+        try {
+          await syncDriverRetirementNotifications(currentUserId, normalizedDrivers);
+        } catch (e) {
+          // Non-fatal: retirement sync failing should not block UI
+          console.warn('Retirement sync failed', e);
+        }
       }
     } catch (err: any) {
       console.error('❌ Driver loading exception:', err);
@@ -188,7 +211,7 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
     if (!statusChartRef.current) return;
 
     const chart = echarts.init(statusChartRef.current);
-    const chartData = ['active', 'inactive', 'suspended'].map((status) => ({
+    const chartData = ['active', 'inactive', 'suspended', 'retired'].map((status) => ({
       name: status === 'inactive' ? 'Inactive' : status.charAt(0).toUpperCase() + status.slice(1),
       value: drivers.filter((driver) => driver.status === status).length,
     }));
@@ -239,6 +262,7 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
             { value: chartData[0].value, name: chartData[0].name, itemStyle: { color: '#10b981' } },
             { value: chartData[1].value, name: chartData[1].name, itemStyle: { color: '#6366f1' } },
             { value: chartData[2].value, name: chartData[2].name, itemStyle: { color: '#ef4444' } },
+            { value: chartData[3].value, name: chartData[3].name, itemStyle: { color: '#8b5cf6' } },
           ],
         },
       ],
@@ -1133,7 +1157,7 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
           <div className="grid gap-2">
             <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-gray-500">Status</div>
             <div className="flex flex-wrap gap-2">
-              {['all', 'active', 'inactive', 'suspended'].map((status) => (
+              {['all', 'active', 'inactive', 'suspended', 'retired'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -1149,7 +1173,9 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                     ? 'Active'
                     : status === 'inactive'
                     ? 'Inactive'
-                    : 'Suspended'}
+                    : status === 'suspended'
+                    ? 'Suspended'
+                    : 'Retired'}
                 </button>
               ))}
             </div>
@@ -1481,6 +1507,7 @@ export default function DriversManagement({ currentUserId, highlightDriverId }: 
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                     <option value="suspended">Suspended</option>
+                    <option value="retired">Retired</option>
                   </select>
                 </div>
                 </div>

@@ -68,3 +68,36 @@ export function buildDriverExpiryNotifications(userId: string, drivers: DriverEx
     return [];
   });
 }
+
+function getAgeFromDob(dob?: string): number | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) {
+    age -= 1;
+  }
+  return age;
+}
+
+export function buildDriverRetirementNotifications(userId: string, drivers: (DriverExpiryNotificationCandidate & { date_of_birth?: string })[], retirementAge = 65): NotificationPayload[] {
+  return drivers.flatMap((driver) => {
+    const age = getAgeFromDob(driver.date_of_birth);
+    const name = driver.name || 'Unnamed driver';
+    if (age === null) return [];
+    if (age >= retirementAge) {
+      return [{
+        user_id: userId,
+        message: `${name} is ${age} years old and has reached retirement age (${retirementAge}). Consider retiring this driver.`,
+        type: 'alert',
+        is_read: false,
+        created_at: new Date().toISOString(),
+        related_entity: 'drivers',
+        related_id: driver.id,
+      }];
+    }
+    return [];
+  });
+}
