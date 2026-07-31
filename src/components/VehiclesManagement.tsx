@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Swal from 'sweetalert2';
-import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Truck, BarChart3, Search, CheckCircle, Activity, Wrench, AlertTriangle, Recycle, MoreVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, X, AlertCircle, Truck, BarChart3, Search, CheckCircle, Activity, Wrench, AlertTriangle, Recycle, MoreVertical, FileText, Image, Gauge, CalendarDays, Building2, Fuel } from 'lucide-react';
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getAllVehicles, createVehicle, updateVehicle, deleteVehicle, syncVehicleStatusNotifications } from '../lib/supabaseQueries';
+import { getAllVehicles, getAllVehiclesFull, createVehicle, updateVehicle, deleteVehicle, syncVehicleStatusNotifications } from '../lib/supabaseQueries';
 import { validateVehicleForm } from '../lib/vehicleUtils';
 
 // ============= INTERFACES =============
@@ -46,6 +45,8 @@ const divisionOptions = [
   'Local and Traditional Courts',
 ];
 
+const HIGH_MILEAGE_THRESHOLD = 5000; // km — flag as highest mileage and alert for maintenance
+
 // ============= MAIN COMPONENT =============
 export default function VehiclesManagement({ highlightVehicleId, currentUserId }: { highlightVehicleId?: string; currentUserId?: string | null }) {
   // ===== STATE DECLARATIONS =====
@@ -69,6 +70,13 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
   const [vehicleCount, setVehicleCount] = useState<number | null>(null);
   const [vehicleImages, setVehicleImages] = useState<{ [key: string]: string[] }>({});
   const [detailsTab, setDetailsTab] = useState<'info' | 'images'>('info');
+  const [mileageVehicles, setMileageVehicles] = useState<Vehicle[]>([]);
+
+  // Fleet Chat state
+  const [messages] = useState<Array<{ id: string; sender: 'user' | 'bot'; text: string; time: number }>>([]);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const funnelRef = useRef<HTMLDivElement | null>(null);
+  const prevHighMileageIdsRef = useRef<Set<string>>(new Set());
 
   const [formData, setFormData] = useState<Partial<Vehicle>>({
     registration_number: '',
@@ -86,12 +94,117 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
     division: '',
   });
 
+  const { vehiclesByMileage } = useMemo(() => {
+    const list = vehicles.map((v) => ({
+      id: v.id,
+      registration: v.registration_number || v.id,
+      make: v.make || '',
+      model: v.model || '',
+      mileage: v.mileage || 0,
+    }));
+
+    list.sort((a, b) => b.mileage - a.mileage);
+
+    const threshold = HIGH_MILEAGE_THRESHOLD;
+    const annotated = list.map((r) => ({ ...r, isHigh: r.mileage >= threshold }));
+    return { vehiclesByMileage: annotated };
+  }, [vehicles]);
+
+  const highMileageAlertVehicles = vehicles.filter((v) => v.mileage >= HIGH_MILEAGE_THRESHOLD && !['maintenance', 'broken', 'disposed'].includes(v.status));
+
   // ===== LOAD VEHICLES ON MOUNT =====
   useEffect(() => {
     if (highlightVehicleId) {
       setViewingId(highlightVehicleId);
     }
   }, [highlightVehicleId]);
+
+  useEffect(() => {
+    // auto-scroll chat to bottom
+    if (messagesRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // render funnel chart for top high-mileage vehicles using ECharts
+  useEffect(() => {
+    if (!funnelRef.current) return;
+    const chart = echarts.init(funnelRef.current as HTMLDivElement);
+    const funnelColors = ['#EA7B7B', '#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#6B7280'];
+    const top = vehiclesByMileage.slice(0, 6).map((v, index) => ({
+      name: `${v.registration} - ${v.mileage.toLocaleString()} km`,
+      value: v.mileage,
+      itemStyle: {
+        color: funnelColors[index % funnelColors.length],
+      },
+      label: {
+        color: '#ffffff',
+        fontWeight: 600,
+      },
+    }));
+    const maxVal = top.length ? Math.max(...top.map((d) => d.value)) : 0;
+    const option: EChartsOption = {
+      tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}: ${Number(p.value).toLocaleString()} km` },
+      series: [
+        {
+          name: 'Mileage',
+          type: 'funnel',
+          left: '10%',
+          top: 5,
+          bottom: 5,
+          width: '80%',
+          min: 0,
+          max: maxVal || 1,
+          sort: 'descending',
+          gap: 4,
+          funnelAlign: 'center',
+          label: { show: true, position: 'inside', fontSize: 11, color: '#ffffff' },
+          labelLine: { show: false },
+          emphasis: {
+            focus: 'self',
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowOffsetY: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.25)',
+            },
+          },
+          data: top,
+        },
+      ],
+    };
+    chart.setOption(option);
+    const handleResize = () => chart.resize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.dispose();
+    };
+  }, [vehiclesByMileage]);
+
+  // Notify when vehicles newly cross the high-mileage threshold
+  useEffect(() => {
+    const prevIds = prevHighMileageIdsRef.current;
+    const newlyCrossed = highMileageAlertVehicles.filter((v) => !prevIds.has(v.id));
+    if (newlyCrossed.length > 0) {
+      // update the prev set immediately to avoid duplicate notifications
+      prevHighMileageIdsRef.current = new Set([...prevIds, ...newlyCrossed.map((v) => v.id)]);
+      // call the notification sync function if we have a user id
+      if (currentUserId) {
+        syncVehicleStatusNotifications(currentUserId, newlyCrossed).catch((err) => {
+          console.warn('Failed to sync high-mileage notifications:', err);
+        });
+      }
+
+      // show an in-app toast and chat message
+      try {
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: `${newlyCrossed.length} vehicle(s) crossed ${HIGH_MILEAGE_THRESHOLD.toLocaleString()} km`, showConfirmButton: false, timer: 4000 });
+      } catch (e) {
+        /* ignore */
+      }
+
+    }
+  }, [highMileageAlertVehicles, currentUserId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -132,6 +245,7 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
               console.warn('⚠️ Vehicle notification sync failed on load:', syncErr);
             });
           }
+          setMileageVehicles(data);
         } else {
           console.log('⚠️ No vehicles returned from query');
           setVehicles([]);
@@ -163,6 +277,7 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
     }, 5000);
 
     loadVehicles();
+    loadMileageVehicles();
 
     return () => {
       console.log('🧹 Cleanup function called');
@@ -170,6 +285,22 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
+
+  const loadMileageVehicles = async () => {
+    try {
+      const { data, error: mileageErr } = await getAllVehiclesFull();
+      if (mileageErr) {
+        console.warn('⚠️ Failed to load full mileage vehicles:', mileageErr);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setMileageVehicles(data);
+      }
+    } catch (err) {
+      console.warn('⚠️ Exception loading full mileage vehicles:', err);
+    }
+  };
 
   // ===== FORM HANDLERS =====
   const resetForm = () => {
@@ -227,6 +358,8 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
       setSubmitting(true);
       console.log('📝 Submitting vehicle form...');
 
+      let updatedList: Vehicle[] = vehicles;
+
       if (editingId) {
         // Update existing vehicle
         const { error: err } = await updateVehicle(editingId, formData);
@@ -248,7 +381,6 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
         console.log('✅ Vehicle updated successfully in Firebase');
         // Fetch fresh data from database to ensure persistence
         const { data: updatedVehicles, error: fetchErr } = await getAllVehicles();
-        let updatedList: Vehicle[] = vehicles;
         if (!fetchErr && updatedVehicles) {
           updatedList = updatedVehicles;
           setVehicles(updatedVehicles);
@@ -258,6 +390,7 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
           updatedList = vehicles.map(v => v.id === editingId ? { ...v, ...formData } as Vehicle : v);
           setVehicles(updatedList);
         }
+        await loadMileageVehicles();
       } else {
         // Create new vehicle
         const { data: newVehicle, error: err } = await createVehicle(formData);
@@ -282,6 +415,7 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
           setVehicles(updatedList);
         }
       }
+      await loadMileageVehicles();
 
       handleCloseForm();
       const successMsg = editingId ? 'Vehicle updated successfully!' : 'Vehicle added successfully!';
@@ -334,6 +468,7 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
       setVehicles(remainingVehicles);
       setVehicleCount(remainingVehicles.length);
       setDeleteConfirm(null);
+      await loadMileageVehicles();
       await Swal.fire({
         icon: 'success',
         title: 'Deleted',
@@ -440,7 +575,7 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
     { name: 'Disposed', value: stats.disposed, color: statusColors.disposed.chart },
   ];
 
-  const mileageByMake = vehicles
+  mileageVehicles
     .reduce((acc: any, v) => {
       const existing = acc.find((m: any) => m.make === v.make);
       if (existing) {
@@ -582,6 +717,31 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
           {/* ===== ALERT PANELS ===== */}
           {(brokenVehicles.length > 0 || maintenanceVehicles.length > 0) && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {highMileageAlertVehicles.length > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm col-span-1 lg:col-span-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={18} className="text-amber-700" />
+                      <div>
+                        <h3 className="text-sm font-semibold text-amber-900">High Mileage Alert</h3>
+                        <p className="text-xs text-amber-700">{highMileageAlertVehicles.length} vehicle(s) have reached {HIGH_MILEAGE_THRESHOLD.toLocaleString()} km — consider scheduling maintenance.</p>
+                      </div>
+                    </div>
+                    <button onClick={() => { /* placeholder: could open maintenance modal */ }} className="px-2 py-1 bg-amber-600 text-white rounded text-xs">Schedule</button>
+                  </div>
+                  <div className="mt-3 grid gap-2 grid-cols-1 md:grid-cols-3">
+                    {highMileageAlertVehicles.slice(0,6).map((vehicle) => (
+                      <div key={vehicle.id} className="flex items-center justify-between rounded-lg border border-amber-200 bg-white/80 px-3 py-2 text-left">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{vehicle.registration_number}</p>
+                          <p className="text-xs text-gray-600">{vehicle.make} {vehicle.model}</p>
+                        </div>
+                        <div className="text-sm font-semibold text-amber-700">{vehicle.mileage.toLocaleString()} km</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {brokenVehicles.length > 0 && (
                 <div className="rounded-xl border border-red-200 bg-red-50/90 p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-2">
@@ -728,25 +888,19 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
               )}
             </div>
 
-            {/* Average Mileage by Make */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                <Truck size={16} className="text-[#EA7B7B]" />
-                Mileage by Make
-              </h2>
-              {mileageByMake.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={mileageByMake}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="make" height={40} tick={{ fontSize: 12 }} />
-                    <YAxis width={40} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="mileage" fill="#EA7B7B" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-gray-500 text-sm">No data</div>
-              )}
+            {/* Fleet Chat — interactive assistant for vehicle queries */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 flex flex-col min-h-[320px]">
+              <div className="flex items-center justify-between mb-3 shrink-0">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Truck size={16} className="text-[#EA7B7B]" />
+                  Fleet Chat
+                </h2>
+                <div className="text-xs text-gray-500">Top vehicles by mileage</div>
+              </div>
+
+              <div className="flex-1 min-h-0 rounded-lg bg-slate-50 p-2">
+                <div ref={funnelRef} className="h-full w-full" />
+              </div>
             </div>
           </div>
 
@@ -884,48 +1038,84 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-[11px] whitespace-nowrap">
                   <thead className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700">
                     <tr>
-                      <th className="px-4 py-2 text-left font-bold text-white">Registration</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Make</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Model</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Year</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Status</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Mileage</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Fuel Type</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Chassis #</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Engine #</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Purchase Date</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Insurance Expiry</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Cost Center</th>
-                      <th className="px-4 py-2 text-left font-bold text-white">Division</th>
-                      <th className="px-4 py-2 text-center font-bold text-white">Actions</th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Truck size={12} /> Registration</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Building2 size={12} /> Make</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><FileText size={12} /> Model</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><CalendarDays size={12} /> Year</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Activity size={12} /> Status</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Gauge size={12} /> Mileage</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Fuel size={12} /> Fuel</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><CalendarDays size={12} /> Insurance</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Building2 size={12} /> Cost</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-left font-bold text-white">
+                        <div className="flex items-center gap-1.5"><Building2 size={12} /> Division</div>
+                      </th>
+                      <th className="px-2.5 py-2 text-center font-bold text-white">
+                        <div className="flex items-center justify-center gap-1.5"><MoreVertical size={12} /> Actions</div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((vehicle, index) => {
                       const colors = statusColors[vehicle.status];
+                      const isHighMileage = (vehicle.mileage ?? 0) >= HIGH_MILEAGE_THRESHOLD;
+                      const isFlagged = vehicle.status === 'broken' || vehicle.status === 'maintenance' || isHighMileage;
+                      const rowHighlightClass = isFlagged
+                        ? vehicle.status === 'broken'
+                          ? 'bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 shadow-[inset_4px_0_0_0_#ef4444] border-l-4 border-red-400'
+                          : vehicle.status === 'maintenance'
+                            ? 'bg-gradient-to-r from-amber-50 via-orange-50 to-yellow-50 shadow-[inset_4px_0_0_0_#f59e0b] border-l-4 border-amber-400'
+                            : 'bg-gradient-to-r from-blue-50 via-cyan-50 to-sky-50 shadow-[inset_4px_0_0_0_#3b82f6] border-l-4 border-blue-400'
+                        : index % 2 === 0
+                          ? 'bg-white'
+                          : 'bg-slate-50';
+
                       return (
-                        <tr key={vehicle.id} className={`border-b border-gray-100 hover:bg-blue-50 transition-all ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                          <td className="px-4 py-3 text-sm font-semibold text-gray-900">{vehicle.registration_number}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.make || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.model || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.year || '—'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${colors.badge}`}>
-                              {vehicle.status.replace(/_/g, ' ')}
-                            </span>
+                        <tr key={vehicle.id} className={`border-b border-gray-100 hover:bg-blue-50 transition-all ${rowHighlightClass}`}>
+                          <td className="px-2.5 py-2 text-[11px] font-semibold text-gray-900">{vehicle.registration_number}</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{vehicle.make || '—'}</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{vehicle.model || '—'}</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{vehicle.year || '—'}</td>
+                          <td className="px-2.5 py-2">
+                            <div className="flex flex-col gap-1">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${colors.badge}`}>
+                                {vehicle.status.replace(/_/g, ' ')}
+                              </span>
+                              {isFlagged && (
+                                <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold whitespace-nowrap ${vehicle.status === 'broken' ? 'bg-red-100 text-red-700' : vehicle.status === 'maintenance' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                  {vehicle.status === 'broken' ? <AlertTriangle size={9} /> : vehicle.status === 'maintenance' ? <Wrench size={9} /> : <AlertCircle size={9} />}
+                                  {vehicle.status === 'broken' ? 'Needs attention' : vehicle.status === 'maintenance' ? 'Under maintenance' : 'High mileage'}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{(vehicle.mileage ?? 0).toLocaleString()} km</td>
-                          <td className="px-4 py-3 text-sm text-gray-600 capitalize">{vehicle.fuel_type || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.chassis_number || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.engine_number || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.purchase_date ? new Date(vehicle.purchase_date).toLocaleDateString('en-GB') : '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry).toLocaleDateString('en-GB') : '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.cost_center || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{vehicle.division || '—'}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{(vehicle.mileage ?? 0).toLocaleString()} km</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600 capitalize">{vehicle.fuel_type || '—'}</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{vehicle.insurance_expiry ? new Date(vehicle.insurance_expiry).toLocaleDateString('en-GB') : '—'}</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{vehicle.cost_center || '—'}</td>
+                          <td className="px-2.5 py-2 text-[11px] text-gray-600">{vehicle.division || '—'}</td>
+                          <td className="px-3 py-2">
                             <div className="relative">
                               <button
                                 onClick={() => setOpenDropdown(openDropdown === vehicle.id ? null : vehicle.id)}
@@ -1273,7 +1463,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                 <>
                   <div className="bg-gradient-to-r from-[#44444E] to-[#2E2E33] px-4 py-3 flex justify-between items-center flex-shrink-0 rounded-t-lg">
                     <div>
-                      <h2 className="text-base font-bold text-white">🚗 Vehicle Details</h2>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <Truck size={18} className="text-[#EA7B7B]" />
+                        Vehicle Details
+                      </h2>
                       <p className="text-xs text-slate-200 mt-0.5">{vehicle.registration_number}</p>
                     </div>
                     <button
@@ -1294,7 +1487,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                           : 'text-gray-600 border-transparent hover:text-gray-900'
                       }`}
                     >
-                      📋 Info
+                      <span className="flex items-center justify-center gap-2">
+                        <FileText size={14} />
+                        Info
+                      </span>
                     </button>
                     <button
                       onClick={() => setDetailsTab('images')}
@@ -1304,7 +1500,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                           : 'text-gray-600 border-transparent hover:text-gray-900'
                       }`}
                     >
-                      🖼️ Images
+                      <span className="flex items-center justify-center gap-2">
+                        <Image size={14} />
+                        Images
+                      </span>
                       {vehicleImages[vehicle.id]?.length > 0 && (
                         <span className="absolute -top-1 right-1 bg-blue-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                           {vehicleImages[vehicle.id].length}
@@ -1321,7 +1520,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500">Vehicle Overview</p>
+                          <p className="text-[11px] uppercase tracking-[0.25em] text-gray-500 flex items-center gap-1.5">
+                            <Activity size={12} className="text-[#EA7B7B]" />
+                            Vehicle Overview
+                          </p>
                           <p className="mt-1 text-sm font-semibold text-gray-900">{vehicle.registration_number}</p>
                           <p className="text-xs text-gray-600">{vehicle.make} {vehicle.model} • {vehicle.year}</p>
                         </div>
@@ -1334,18 +1536,27 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                     {/* Key Information - Highlighted */}
                     <div className="grid grid-cols-2 gap-2 bg-gradient-to-br from-blue-50 to-blue-50/50 p-3 rounded-lg border border-blue-100">
                       <div>
-                        <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">⛽ Fuel</p>
+                        <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                          <Fuel size={12} className="text-[#EA7B7B]" />
+                          Fuel
+                        </p>
                         <p className="text-xs font-bold text-gray-900 mt-1 capitalize">{vehicle.fuel_type}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide">🛣️ Mileage</p>
+                        <p className="text-xs text-gray-600 font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                          <Gauge size={12} className="text-[#EA7B7B]" />
+                          Mileage
+                        </p>
                         <p className="text-xs font-bold text-gray-900 mt-1">{vehicle.mileage.toLocaleString()} km</p>
                       </div>
                     </div>
 
                     {/* Technical Details */}
                     <div>
-                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide">📋 Technical</h4>
+                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide flex items-center gap-1.5">
+                        <Wrench size={12} className="text-[#EA7B7B]" />
+                        Technical
+                      </h4>
                       <div className="grid grid-cols-1 gap-1.5 space-y-0">
                         <div className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
                           <span className="text-xs text-gray-600">Chassis</span>
@@ -1360,7 +1571,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
 
                     {/* Date Information */}
                     <div>
-                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide">📅 Dates</h4>
+                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide flex items-center gap-1.5">
+                        <CalendarDays size={12} className="text-[#EA7B7B]" />
+                        Dates
+                      </h4>
                       <div className="grid grid-cols-1 gap-1.5 space-y-0">
                         <div className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
                           <span className="text-xs text-gray-600">Purchase</span>
@@ -1378,7 +1592,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                     </div>
 
                     <div>
-                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide">🏷️ Organizational</h4>
+                      <h4 className="text-xs font-bold uppercase text-gray-700 mb-2 tracking-wide flex items-center gap-1.5">
+                        <Building2 size={12} className="text-[#EA7B7B]" />
+                        Organizational
+                      </h4>
                       <div className="grid grid-cols-1 gap-1.5 space-y-0">
                         <div className="flex justify-between items-center p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
                           <span className="text-xs text-gray-600">Cost Center</span>
@@ -1407,7 +1624,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                             id={`image-upload-${vehicle.id}`}
                           />
                           <label htmlFor={`image-upload-${vehicle.id}`} className="cursor-pointer block">
-                            <p className="text-xs font-semibold text-gray-700 mb-1">📸 Click to upload images</p>
+                            <p className="text-xs font-semibold text-gray-700 mb-1 flex items-center justify-center gap-2">
+                              <Image size={14} className="text-[#EA7B7B]" />
+                              Click to upload images
+                            </p>
                             <p className="text-xs text-gray-500">PNG, JPG, GIF (Max 5MB)</p>
                           </label>
                         </div>
@@ -1433,7 +1653,10 @@ export default function VehiclesManagement({ highlightVehicleId, currentUserId }
                           </div>
                         ) : (
                           <div className="text-center py-6 text-gray-500">
-                            <p className="text-xs">📭 No images yet</p>
+                            <p className="text-xs flex items-center justify-center gap-2">
+                              <Image size={14} className="text-[#EA7B7B]" />
+                              No images yet
+                            </p>
                             <p className="text-xs text-gray-400 mt-1">Upload images to get started</p>
                           </div>
                         )}

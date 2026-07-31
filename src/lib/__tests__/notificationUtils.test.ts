@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDriverExpiryNotifications, resolveNotificationTarget } from '../notificationUtils';
+import { buildDriverExpiryNotifications, buildVehicleStatusNotifications, resolveNotificationTarget } from '../notificationUtils';
 
 describe('resolveNotificationTarget', () => {
   it('returns the drivers tab and detail id for driver-linked notifications', () => {
@@ -42,5 +42,16 @@ describe('buildDriverExpiryNotifications', () => {
     expect(notifications.some((n) => n.message.includes('Alice'))).toBe(true);
     expect(notifications.some((n) => n.message.includes('Bob'))).toBe(true);
     expect(notifications.some((n) => n.type === 'alert' || n.type === 'warning')).toBe(true);
+  });
+});
+
+describe('buildVehicleStatusNotifications', () => {
+  it('creates a mileage notification for vehicles that reached the maintenance threshold', () => {
+    const notifications = buildVehicleStatusNotifications('user-1', [
+      { id: 'vehicle-1', registration_number: 'JJ-01-ABC', status: 'available', mileage: 5000 },
+    ]);
+
+    expect(notifications.some((n) => n.message.includes('reached 5,000 km'))).toBe(true);
+    expect(notifications.some((n) => n.related_id === 'vehicle-1')).toBe(true);
   });
 });

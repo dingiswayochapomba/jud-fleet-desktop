@@ -12,7 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { firestoreDb } from './firebase';
-import { buildDriverExpiryNotifications, buildDriverRetirementNotifications } from './notificationUtils';
+import { buildDriverExpiryNotifications, buildDriverRetirementNotifications, buildVehicleStatusNotifications, dedupeNotificationsBySignature } from './notificationUtils';
 
 type Result<T> = { data: T | null; error: any };
 
@@ -224,6 +224,9 @@ export async function deleteUserProfile(userId: string) {
 export async function getAllVehicles() {
   return listDocs<any>('vehicles', [orderBy('created_at', 'desc'), limit(100)]);
 }
+export async function getAllVehiclesFull() {
+  return listDocs<any>('vehicles', [orderBy('created_at', 'desc')]);
+}
 export async function getVehicleById(vehicleId: string) {
   try {
     const snap = await getDoc(doc(firestoreDb, 'vehicles', vehicleId));
@@ -337,12 +340,14 @@ export async function syncDriverExpiryNotifications(userId: string, drivers: any
 
   try {
     const existing = await listDocs<any>('notifications', [where('user_id', '==', userId)]);
-    const existingIds = new Set(
+    const existingSignatures = new Set(
       (existing.data || [])
-        .filter((item: any) => item.related_entity === 'drivers' && item.related_id)
-        .map((item: any) => item.related_id)
+        .map((item: any) => `${item.related_entity || 'global'}::${item.related_id || 'none'}::${item.message}`)
     );
-    const generated = buildDriverExpiryNotifications(userId, drivers).filter((item) => !existingIds.has(item.related_id));
+    const generated = dedupeNotificationsBySignature(buildDriverExpiryNotifications(userId, drivers)).filter((item) => {
+      const signature = `${item.related_entity || 'global'}::${item.related_id || 'none'}::${item.message}`;
+      return !existingSignatures.has(signature);
+    });
 
     const created = [] as any[];
     for (const notification of generated) {
@@ -361,12 +366,14 @@ export async function syncDriverRetirementNotifications(userId: string, drivers:
 
   try {
     const existing = await listDocs<any>('notifications', [where('user_id', '==', userId)]);
-    const existingIds = new Set(
+    const existingSignatures = new Set(
       (existing.data || [])
-        .filter((item: any) => item.related_entity === 'drivers' && item.related_id)
-        .map((item: any) => item.related_id)
+        .map((item: any) => `${item.related_entity || 'global'}::${item.related_id || 'none'}::${item.message}`)
     );
-    const generated = buildDriverRetirementNotifications(userId, drivers).filter((item) => !existingIds.has(item.related_id));
+    const generated = dedupeNotificationsBySignature(buildDriverRetirementNotifications(userId, drivers)).filter((item) => {
+      const signature = `${item.related_entity || 'global'}::${item.related_id || 'none'}::${item.message}`;
+      return !existingSignatures.has(signature);
+    });
 
     const created = [] as any[];
     for (const notification of generated) {
@@ -385,12 +392,14 @@ export async function syncVehicleStatusNotifications(userId: string, vehicles: a
 
   try {
     const existing = await listDocs<any>('notifications', [where('user_id', '==', userId)]);
-    const existingIds = new Set(
+    const existingSignatures = new Set(
       (existing.data || [])
-        .filter((item: any) => item.related_entity === 'vehicles' && item.related_id)
-        .map((item: any) => item.related_id)
+        .map((item: any) => `${item.related_entity || 'global'}::${item.related_id || 'none'}::${item.message}`)
     );
-    const generated = buildVehicleStatusNotifications(userId, vehicles).filter((item) => !existingIds.has(item.related_id));
+    const generated = dedupeNotificationsBySignature(buildVehicleStatusNotifications(userId, vehicles)).filter((item) => {
+      const signature = `${item.related_entity || 'global'}::${item.related_id || 'none'}::${item.message}`;
+      return !existingSignatures.has(signature);
+    });
 
     const created = [] as any[];
     for (const notification of generated) {

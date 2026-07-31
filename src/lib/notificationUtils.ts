@@ -14,6 +14,19 @@ export interface NotificationPayload {
   related_id?: string;
 }
 
+export function dedupeNotificationsBySignature(notifications: NotificationPayload[]): NotificationPayload[] {
+  const seen = new Set<string>();
+
+  return notifications.filter((notification) => {
+    const signature = `${notification.related_entity || 'global'}::${notification.related_id || 'none'}::${notification.message}`;
+    if (seen.has(signature)) {
+      return false;
+    }
+    seen.add(signature);
+    return true;
+  });
+}
+
 function getDaysUntilExpiry(value?: string): number | null {
   if (!value) return null;
   const expiryDate = new Date(value);
@@ -112,11 +125,26 @@ function getVehicleDaysUntilDate(value?: string): number | null {
   return Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export function buildVehicleStatusNotifications(userId: string, vehicles: { id?: string; registration_number?: string; status?: string; insurance_expiry?: string; }[]): NotificationPayload[] {
+const HIGH_MILEAGE_THRESHOLD = 5000;
+
+export function buildVehicleStatusNotifications(userId: string, vehicles: { id?: string; registration_number?: string; status?: string; insurance_expiry?: string; mileage?: number | string | null; }[]): NotificationPayload[] {
   return vehicles.flatMap((vehicle) => {
     const name = vehicle.registration_number || 'Unnamed vehicle';
     const status = (vehicle.status || '').toString().toLowerCase();
     const notifications: NotificationPayload[] = [];
+    const mileageValue = Number(vehicle.mileage ?? 0);
+
+    if (Number.isFinite(mileageValue) && mileageValue >= HIGH_MILEAGE_THRESHOLD) {
+      notifications.push({
+        user_id: userId,
+        message: `Vehicle ${name} has reached ${mileageValue.toLocaleString()} km and should be reviewed for maintenance planning.`,
+        type: 'warning',
+        is_read: false,
+        created_at: new Date().toISOString(),
+        related_entity: 'vehicles',
+        related_id: vehicle.id,
+      });
+    }
 
     if (status === 'broken') {
       notifications.push({
