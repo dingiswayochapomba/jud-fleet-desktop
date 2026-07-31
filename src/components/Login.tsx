@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Eye, Truck, Loader } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { firebaseAuth } from '../lib/firebase';
+import { getDemoSessionEnabled, setDemoSessionEnabled, shouldUseDemoSession } from '../lib/authUtils';
 
 interface LoginProps {
   onLoginSuccess?: () => void;
@@ -28,9 +29,21 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       }
 
       // Sign in with Firebase
-      await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
-      
-      console.log('✓ Login successful:', email);
+      try {
+        await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        console.log('✓ Login successful:', email);
+      } catch (authError: any) {
+        if (shouldUseDemoSession(authError)) {
+          console.warn('Firebase unavailable, using local demo session');
+          setDemoSessionEnabled(true);
+          if (onLoginSuccess) {
+            onLoginSuccess();
+          }
+          return;
+        }
+        throw authError;
+      }
+
       setEmail('');
       setPassword('');
       if (onLoginSuccess) {
@@ -40,7 +53,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       console.error('Login error:', err);
       
       // Firebase error handling
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+      if (shouldUseDemoSession(err)) {
+        setDemoSessionEnabled(true);
+        if (onLoginSuccess) {
+          onLoginSuccess();
+        }
+        return;
+      } else if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         setError('Invalid email or password. Please try again.');
       } else if (err.code === 'auth/user-disabled') {
         setError('This account has been disabled.');

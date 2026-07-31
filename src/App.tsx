@@ -20,6 +20,7 @@ import { getUserProfileByFirebase } from './lib/supabaseQueries';
 import { logActivity, updateUserProfile } from './lib/firebaseQueries';
 import { canAccessUsersPage, getRoleKey, isUsersReadOnly } from './lib/access';
 import { resolveNotificationTarget } from './lib/notificationUtils';
+import { getDemoSessionEnabled } from './lib/authUtils';
 
 // Tab configuration
 const tabNames: { [key: string]: string } = {
@@ -37,7 +38,7 @@ const tabNames: { [key: string]: string } = {
 };
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => getDemoSessionEnabled());
   const [user, setUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,14 @@ function App() {
   const lastAuthUidRef = useRef<string | null>(null);
 
   const currentUserId = user?.uid || user?.id || userProfile?.id || null;
+
+  useEffect(() => {
+    if (getDemoSessionEnabled()) {
+      setIsLoggedIn(true);
+      setUser({ uid: 'demo-user', email: 'demo@judiciary.local' });
+      setUserProfile({ id: 'demo-user', email: 'demo@judiciary.local', role: 'transport_officer' });
+    }
+  }, []);
 
   // Fetch user profile from database
   const fetchUserProfile = useCallback(async (userId: string, email?: string) => {

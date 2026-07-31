@@ -9,6 +9,7 @@ export {
   
   // Vehicles
   getAllVehicles,
+  getAllVehiclesFull,
   getVehicleById,
   createVehicle,
   updateVehicle,
