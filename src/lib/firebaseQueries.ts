@@ -8,6 +8,7 @@ import {
   limit,
   orderBy,
   query,
+  runTransaction,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -317,6 +318,159 @@ export async function updateFuelLog(fuelLogId: string, updates: any) {
 }
 export async function deleteFuelLog(fuelLogId: string) {
   return removeOne('fuel_logs', fuelLogId);
+}
+
+export async function getAllPrimaryLedgerEntries() {
+  return listDocs<any>('primary_ledger', [orderBy('created_at', 'desc')]);
+}
+
+export async function getAllVehicleLogBookEntries() {
+  return listDocs<any>('vehicle_log_book', [orderBy('created_at', 'desc')]);
+}
+
+export async function getFuelMonthBalance(monthKey: string): Promise<Result<any>> {
+  try {
+    const snapshot = await getDoc(doc(firestoreDb, 'fuel_month_balances', monthKey));
+    return {
+      data: snapshot.exists()
+        ? withId<any>(snapshot.id, snapshot.data())
+        : { id: monthKey, month_key: monthKey, allocated_litres: 0, issued_litres: 0, balance_litres: 0 },
+      error: null,
+    };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
+export async function getAllFuelRegisterEntries() {
+  return listDocs<any>('fuel_register', [orderBy('created_at', 'desc')]);
+}
+
+export async function createPrimaryLedgerEntry(entryData: any) {
+  const monthKey = (entryData.date_of_top_up || '').slice(0, 7);
+  const litres = Number(entryData.amount_to_top_up);
+  if (!/^\d{4}-\d{2}$/.test(monthKey) || !Number.isFinite(litres) || litres <= 0) {
+    return { data: null, error: new Error('Enter a valid date and a monthly fuel allocation greater than zero litres.') };
+  }
+
+  const entryRef = doc(collection(firestoreDb, 'primary_ledger'));
+  const monthRef = doc(firestoreDb, 'fuel_month_balances', monthKey);
+  const createdAt = entryData.created_at || nowIso();
+
+  try {
+    const data = await runTransaction(firestoreDb, async (transaction) => {
+      const monthSnapshot = await transaction.get(monthRef);
+      const current = monthSnapshot.exists() ? monthSnapshot.data() : {};
+      const allocatedLitres = Number(current.allocated_litres || 0) + litres;
+      const issuedLitres = Number(current.issued_litres || 0);
+      const balanceLitres = allocatedLitres - issuedLitres;
+      const payload = {
+        ...entryData,
+        month_key: monthKey,
+        amount_to_top_up: litres,
+        balance_after_refill: balanceLitres,
+        fuel_unit: 'litres',
+        created_at: createdAt,
+        updated_at: entryData.updated_at || createdAt,
+      };
+
+      transaction.set(entryRef, payload);
+      transaction.set(monthRef, {
+        month_key: monthKey,
+        allocated_litres: allocatedLitres,
+        issued_litres: issuedLitres,
+        balance_litres: balanceLitres,
+        updated_at: nowIso(),
+      }, { merge: true });
+      return withId<any>(entryRef.id, payload);
+    });
+
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
+export async function createFuelRegisterEntry(entryData: any) {
+  const monthKey = (entryData.date_of_top_up || '').slice(0, 7);
+  const litres = Number(entryData.amount_to_top_up);
+  if (!/^\d{4}-\d{2}$/.test(monthKey) || !Number.isFinite(litres) || litres <= 0) {
+    return { data: null, error: new Error('Enter a valid date and an issue greater than zero litres.') };
+  }
+
+  const entryRef = doc(collection(firestoreDb, 'fuel_register'));
+  const monthRef = doc(firestoreDb, 'fuel_month_balances', monthKey);
+  const createdAt = entryData.created_at || nowIso();
+
+  try {
+    const data = await runTransaction(firestoreDb, async (transaction) => {
+      const monthSnapshot = await transaction.get(monthRef);
+      if (!monthSnapshot.exists()) {
+        throw new Error(`Create the Primary Ledger allocation for ${monthKey} before issuing fuel.`);
+      }
+
+      const current = monthSnapshot.data();
+      const allocatedLitres = Number(current.allocated_litres || 0);
+      const issuedLitres = Number(current.issued_litres || 0);
+      const balanceLitres = allocatedLitres - issuedLitres;
+      if (litres > balanceLitres) {
+        throw new Error(`Only ${balanceLitres.toFixed(2)} litres remain in the ${monthKey} Primary Ledger.`);
+      }
+
+      const nextIssuedLitres = issuedLitres + litres;
+      const nextBalanceLitres = allocatedLitres - nextIssuedLitres;
+      const payload = {
+        ...entryData,
+        month_key: monthKey,
+        amount_to_top_up: litres,
+        balance_after_refill: nextBalanceLitres,
+        fuel_unit: 'litres',
+        created_at: createdAt,
+        updated_at: entryData.updated_at || createdAt,
+      };
+
+      transaction.set(entryRef, payload);
+      transaction.set(monthRef, {
+        month_key: monthKey,
+        allocated_litres: allocatedLitres,
+        issued_litres: nextIssuedLitres,
+        balance_litres: nextBalanceLitres,
+        updated_at: nowIso(),
+      }, { merge: true });
+      return withId<any>(entryRef.id, payload);
+    });
+
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
+export async function createVehicleLogBookEntry(entryData: any) {
+  return addOne<any>('vehicle_log_book', {
+    ...entryData,
+    how_many_litres: Number(entryData.how_many_litres || 0),
+    mileage_start_up: Number(entryData.mileage_start_up || 0),
+    finishing_mileage: Number(entryData.finishing_mileage || 0),
+    distance_covered: Number(entryData.distance_covered || 0),
+    remaining_fuel_litres: Number(entryData.remaining_fuel_litres || 0),
+  });
+}
+
+export async function updatePrimaryLedgerEntry(entryId: string, updates: any) {
+  return updateOne<any>('primary_ledger', entryId, { ...updates, updated_at: updates.updated_at || nowIso() });
+}
+
+export async function updateFuelRegisterEntry(entryId: string, updates: any) {
+  return updateOne<any>('fuel_register', entryId, { ...updates, updated_at: updates.updated_at || nowIso() });
+}
+
+export async function deletePrimaryLedgerEntry(entryId: string) {
+  return removeOne('primary_ledger', entryId);
+}
+
+export async function deleteFuelRegisterEntry(entryId: string) {
+  return removeOne('fuel_register', entryId);
 }
 
 export async function getNotificationsForUser(userId: string, unreadOnly = false) {

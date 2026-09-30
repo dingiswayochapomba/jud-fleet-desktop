@@ -16,6 +16,7 @@ import {
   Line,
   Legend,
 } from 'recharts';
+import FleetLoader from './FleetLoader';
 import {
   Fuel,
   Plus,
@@ -46,6 +47,12 @@ import {
   getAllVehicles,
   getAllDrivers,
   updateFuelLog,
+  createPrimaryLedgerEntry,
+  createFuelRegisterEntry,
+  getAllPrimaryLedgerEntries,
+  getAllFuelRegisterEntries,
+  getAllVehicleLogBookEntries,
+  createVehicleLogBookEntry,
 } from '../lib/firebaseQueries';
 import { calculateFuelStats, buildVehicleBreakdown, calculateFuelAvailability, buildFuelTrendData, type VehicleFuelBreakdown } from '../lib/fuelStats';
 import { filterFuelLogs } from '../lib/fuelSearch';
@@ -91,6 +98,24 @@ interface FuelStats {
   anomalies: string[];
 }
 
+function createEmptyVehicleLogBookForm() {
+  return {
+    date: new Date().toISOString().slice(0, 10),
+    time: new Date().toTimeString().slice(0, 5),
+    vehicle_registration_number: '',
+    authorising_officer: '',
+    mileage_start_up: '',
+    finishing_mileage: '',
+    distance_covered: '',
+    fuel_type: '',
+    how_many_litres: '',
+    remaining_fuel_litres: '',
+    driver_name: '',
+    journey_description: '',
+    journey_end_time: '',
+  };
+}
+
 export default function FuelTracking() {
   const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -111,7 +136,39 @@ export default function FuelTracking() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [showPrimaryLedgerModal, setShowPrimaryLedgerModal] = useState(false);
+  const [showFuelRegisterModal, setShowFuelRegisterModal] = useState(false);
   const [showVehicleLogBookModal, setShowVehicleLogBookModal] = useState(false);
+  const [ledgerMonth, setLedgerMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [primaryLedgerEntries, setPrimaryLedgerEntries] = useState<any[]>([]);
+  const [fuelRegisterEntries, setFuelRegisterEntries] = useState<any[]>([]);
+  const [vehicleLogBookEntries, setVehicleLogBookEntries] = useState<any[]>([]);
+  const [vehicleLogBookForm, setVehicleLogBookForm] = useState(createEmptyVehicleLogBookForm);
+  const [primaryLedgerForm, setPrimaryLedgerForm] = useState({
+    date_of_top_up: new Date().toISOString().slice(0, 10),
+    proof_of_payment: '',
+    amount_to_top_up: '',
+    general_receipt_number: '',
+    vehicle_registration_number: '',
+    fuel_gas_station: '',
+    balance_after_refill: '',
+    driver_name: '',
+    authorising_officer: '',
+    activity_description: '',
+  });
+
+  const [fuelRegisterForm, setFuelRegisterForm] = useState({
+    date_of_top_up: new Date().toISOString().slice(0, 10),
+    proof_of_payment: '',
+    amount_to_top_up: '',
+    general_receipt_number: '',
+    vehicle_registration_number: '',
+    fuel_gas_station: '',
+    balance_after_refill: '',
+    balance_after_top_up: '',
+    driver_name: '',
+    authorising_officer: '',
+    activity_description: '',
+  });
   
   // Filter states
   const [filterType, setFilterType] = useState<'all' | 'month' | 'range'>('all');
@@ -168,6 +225,52 @@ export default function FuelTracking() {
     ];
   }, [fleetStats]);
 
+  const getEntryMonth = (entry: any) => entry.month_key || (entry.date_of_top_up || entry.date || '').slice(0, 7);
+  const getMonthBalance = (monthKey: string) => {
+    const allocated = primaryLedgerEntries
+      .filter((entry) => getEntryMonth(entry) === monthKey)
+      .reduce((sum, entry) => sum + Number(entry.amount_to_top_up || 0), 0);
+    const issued = fuelRegisterEntries
+      .filter((entry) => getEntryMonth(entry) === monthKey)
+      .reduce((sum, entry) => sum + Number(entry.amount_to_top_up || 0), 0);
+    return { allocated, issued, balance: allocated - issued };
+  };
+  const currentMonthBalance = getMonthBalance(ledgerMonth);
+  const primaryFormBalance = getMonthBalance(primaryLedgerForm.date_of_top_up.slice(0, 7)).balance
+    + Number(primaryLedgerForm.amount_to_top_up || 0);
+  const registerFormBalance = getMonthBalance(fuelRegisterForm.date_of_top_up.slice(0, 7)).balance
+    - Number(fuelRegisterForm.amount_to_top_up || 0);
+  const reconciliationRows = useMemo(() => {
+    const totals = new Map<string, { registration: string; issued: number; logged: number }>();
+    fuelRegisterEntries.filter((entry) => getEntryMonth(entry) === ledgerMonth).forEach((entry) => {
+      const registration = (entry.vehicle_registration_number || '').trim().toUpperCase();
+      if (!registration) return;
+      const current = totals.get(registration) || { registration, issued: 0, logged: 0 };
+      current.issued += Number(entry.amount_to_top_up || 0);
+      totals.set(registration, current);
+    });
+    vehicleLogBookEntries.filter((entry) => getEntryMonth(entry) === ledgerMonth).forEach((entry) => {
+      const registration = (entry.vehicle_registration_number || '').trim().toUpperCase();
+      if (!registration) return;
+      const current = totals.get(registration) || { registration, issued: 0, logged: 0 };
+      current.logged += Number(entry.how_many_litres || 0);
+      totals.set(registration, current);
+    });
+    return Array.from(totals.values()).sort((a, b) => a.registration.localeCompare(b.registration));
+  }, [fuelRegisterEntries, vehicleLogBookEntries, ledgerMonth]);
+
+  const reloadFuelLedgerRecords = async () => {
+    const [primaryResult, registerResult, logBookResult] = await Promise.all([
+      getAllPrimaryLedgerEntries(),
+      getAllFuelRegisterEntries(),
+      getAllVehicleLogBookEntries(),
+    ]);
+    setPrimaryLedgerEntries(primaryResult.data || []);
+    setFuelRegisterEntries(registerResult.data || []);
+    setVehicleLogBookEntries(logBookResult.data || []);
+    return [primaryResult, registerResult, logBookResult];
+  };
+
   const refreshFleetOverview = async (currentVehicles: Vehicle[] = vehicles) => {
     if (!currentVehicles.length) {
       setFleetStats(null);
@@ -191,6 +294,148 @@ export default function FuelTracking() {
     setFuelAvailability(calculateFuelAvailability(logs, selectedVehicleData?.mileage || 0));
   };
 
+  const handlePrimaryLedgerFieldChange = (field: string, value: string) => {
+    setPrimaryLedgerForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePrimaryLedgerSubmit = async () => {
+    try {
+      if (Number(primaryLedgerForm.amount_to_top_up) <= 0) {
+        showErrorAlert('Primary Ledger', 'Enter a monthly fuel allocation greater than zero litres.');
+        return;
+      }
+      const payload = {
+        date_of_top_up: primaryLedgerForm.date_of_top_up,
+        proof_of_payment: primaryLedgerForm.proof_of_payment.trim(),
+        amount_to_top_up: primaryLedgerForm.amount_to_top_up ? Number(primaryLedgerForm.amount_to_top_up) : 0,
+        general_receipt_number: primaryLedgerForm.general_receipt_number.trim(),
+        vehicle_registration_number: primaryLedgerForm.vehicle_registration_number.trim(),
+        fuel_gas_station: primaryLedgerForm.fuel_gas_station.trim(),
+        balance_after_refill: primaryLedgerForm.balance_after_refill ? Number(primaryLedgerForm.balance_after_refill) : 0,
+        balance_after_top_up: primaryLedgerForm.balance_after_top_up ? Number(primaryLedgerForm.balance_after_top_up) : 0,
+        driver_name: primaryLedgerForm.driver_name.trim(),
+        authorising_officer: primaryLedgerForm.authorising_officer.trim(),
+        activity_description: primaryLedgerForm.activity_description.trim(),
+      };
+
+      const { error } = await createPrimaryLedgerEntry(payload);
+
+      if (error) {
+        showErrorAlert('Primary Ledger', error.message || 'Failed to save the fuel ledger entry to Firebase.');
+        return;
+      }
+
+      await reloadFuelLedgerRecords();
+
+      setPrimaryLedgerForm({
+        date_of_top_up: new Date().toISOString().slice(0, 10),
+        proof_of_payment: '',
+        amount_to_top_up: '',
+        general_receipt_number: '',
+        vehicle_registration_number: '',
+        fuel_gas_station: '',
+        balance_after_refill: '',
+        balance_after_top_up: '',
+        driver_name: '',
+        authorising_officer: '',
+        activity_description: '',
+      });
+      setShowPrimaryLedgerModal(false);
+      showSuccessAlert('Primary Ledger', 'Fuel top-up entry saved successfully to Firebase.');
+    } catch (err) {
+      console.error('Primary ledger save failed:', err);
+      showErrorAlert('Primary Ledger', 'Unexpected error while saving the ledger record.');
+    }
+  };
+
+  const handleFuelRegisterFieldChange = (field: string, value: string) => {
+    setFuelRegisterForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleFuelRegisterSubmit = async () => {
+    try {
+      if (!fuelRegisterForm.vehicle_registration_number.trim()) {
+        showErrorAlert('Fuel Register', 'Select the vehicle receiving fuel.');
+        return;
+      }
+      if (Number(fuelRegisterForm.amount_to_top_up) <= 0) {
+        showErrorAlert('Fuel Register', 'Enter a fuel issue greater than zero litres.');
+        return;
+      }
+      const payload = {
+        date_of_top_up: fuelRegisterForm.date_of_top_up,
+        proof_of_payment: fuelRegisterForm.proof_of_payment.trim(),
+        amount_to_top_up: fuelRegisterForm.amount_to_top_up ? Number(fuelRegisterForm.amount_to_top_up) : 0,
+        general_receipt_number: fuelRegisterForm.general_receipt_number.trim(),
+        vehicle_registration_number: fuelRegisterForm.vehicle_registration_number.trim().toUpperCase(),
+        fuel_gas_station: fuelRegisterForm.fuel_gas_station.trim(),
+        balance_after_refill: registerFormBalance,
+        driver_name: fuelRegisterForm.driver_name.trim(),
+        authorising_officer: fuelRegisterForm.authorising_officer.trim(),
+        activity_description: fuelRegisterForm.activity_description.trim(),
+      };
+
+      const { error } = await createFuelRegisterEntry(payload);
+
+      if (error) {
+        showErrorAlert('Fuel Register', error.message || 'Failed to save the fuel register entry to Firebase.');
+        return;
+      }
+      await reloadFuelLedgerRecords();
+
+      setFuelRegisterForm({
+        date_of_top_up: new Date().toISOString().slice(0, 10),
+        proof_of_payment: '',
+        amount_to_top_up: '',
+        general_receipt_number: '',
+        vehicle_registration_number: '',
+        fuel_gas_station: '',
+        balance_after_refill: '',
+        driver_name: '',
+        authorising_officer: '',
+        activity_description: '',
+      });
+      setShowFuelRegisterModal(false);
+      showSuccessAlert('Fuel Register', 'Fuel register entry saved successfully to Firebase.');
+    } catch (err) {
+      console.error('Fuel register save failed:', err);
+      showErrorAlert('Fuel Register', 'Unexpected error while saving the fuel register record.');
+    }
+  };
+
+  const handleVehicleLogBookFieldChange = (field: string, value: string) => {
+    setVehicleLogBookForm((previous) => {
+      const next = { ...previous, [field]: value };
+      if (field === 'mileage_start_up' || field === 'finishing_mileage') {
+        const start = Number(field === 'mileage_start_up' ? value : next.mileage_start_up);
+        const finish = Number(field === 'finishing_mileage' ? value : next.finishing_mileage);
+        next.distance_covered = start && finish >= start ? String(finish - start) : '';
+      }
+      return next;
+    });
+  };
+
+  const handleVehicleLogBookSubmit = async () => {
+    if (!vehicleLogBookForm.vehicle_registration_number || Number(vehicleLogBookForm.how_many_litres) < 0) {
+      showErrorAlert('Vehicle Log Book', 'Select a vehicle and enter a valid fuel quantity in litres.');
+      return;
+    }
+
+    const { error: saveError } = await createVehicleLogBookEntry({
+      ...vehicleLogBookForm,
+      vehicle_registration_number: vehicleLogBookForm.vehicle_registration_number.toUpperCase(),
+    });
+    if (saveError) {
+      showErrorAlert('Vehicle Log Book', 'Failed to save the journey record to Firebase.');
+      return;
+    }
+
+    await reloadFuelLedgerRecords();
+    setVehicleLogBookForm(createEmptyVehicleLogBookForm());
+    setShowVehicleLogBookModal(false);
+    showSuccessAlert('Vehicle Log Book', 'Journey log entry saved successfully.');
+  };
+
   // Fetch vehicles and drivers on mount
   useEffect(() => {
     const loadInitialData = async () => {
@@ -198,6 +443,7 @@ export default function FuelTracking() {
         setLoading(true);
         const vehiclesRes = await getAllVehicles();
         const driversRes = await getAllDrivers();
+        await reloadFuelLedgerRecords();
 
         const vehiclesList = vehiclesRes.data || [];
         const driversList = driversRes.data || [];
@@ -584,14 +830,7 @@ export default function FuelTracking() {
   }, [filteredLogs, selectedVehicle, vehicles]);
 
   if (loading && vehicles.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Fuel className="w-12 h-12 mx-auto text-[#EA7B7B] mb-4 animate-pulse" />
-          <p className="text-gray-600">Loading fuel tracking...</p>
-        </div>
-      </div>
-    );
+    return <FleetLoader label="Loading fuel tracking" detail="Collecting refuelling and mileage records" />;
   }
 
   return (
@@ -623,7 +862,7 @@ export default function FuelTracking() {
               Primary Ledger
             </button>
             <button
-              onClick={() => setShowPrimaryLedgerModal(true)}
+              onClick={() => setShowFuelRegisterModal(true)}
               className="flex items-center gap-1 px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-all font-semibold text-xs shadow-md"
             >
               <Plus size={14} />
@@ -640,6 +879,79 @@ export default function FuelTracking() {
         </div>
       </div>
 
+      <section className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Monthly Fuel Control</h2>
+            <p className="text-xs text-gray-500">Primary Ledger allocation less Fuel Register issues, measured in litres.</p>
+          </div>
+          <label className="text-xs font-medium text-gray-600">
+            Ledger month
+            <input
+              type="month"
+              value={ledgerMonth}
+              onChange={(event) => setLedgerMonth(event.target.value)}
+              className="ml-2 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">Judiciary allocation</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{currentMonthBalance.allocated.toFixed(2)} L</p>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">Issued to vehicles</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{currentMonthBalance.issued.toFixed(2)} L</p>
+          </div>
+          <div className={`rounded-md border p-3 ${currentMonthBalance.balance < 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
+            <p className="text-xs text-gray-600">Remaining balance</p>
+            <p className={`mt-1 text-lg font-semibold ${currentMonthBalance.balance < 0 ? 'text-red-700' : 'text-emerald-800'}`}>{currentMonthBalance.balance.toFixed(2)} L</p>
+          </div>
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">Vehicles to reconcile</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{reconciliationRows.filter((row) => row.issued > 0 || row.logged > 0).length}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-x-auto">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-600">Vehicle reconciliation</h3>
+            <span className="text-xs text-gray-500">Register issues compared with Log Book litres</span>
+          </div>
+          <table className="w-full min-w-[620px] border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-y border-gray-200 text-gray-500">
+                <th className="py-2 pr-3 font-medium">Vehicle</th>
+                <th className="py-2 px-3 text-right font-medium">Issued</th>
+                <th className="py-2 px-3 text-right font-medium">Log Book</th>
+                <th className="py-2 px-3 text-right font-medium">Difference</th>
+                <th className="py-2 pl-3 text-right font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reconciliationRows.length === 0 ? (
+                <tr><td colSpan={5} className="py-4 text-center text-gray-500">No fuel issues or log-book records for this month.</td></tr>
+              ) : reconciliationRows.map((row) => {
+                const difference = row.logged - row.issued;
+                const reconciled = row.issued > 0 && Math.abs(difference) < 0.01;
+                return (
+                  <tr key={row.registration} className="border-b border-gray-100 text-gray-700">
+                    <td className="py-2 pr-3 font-medium text-gray-900">{row.registration}</td>
+                    <td className="py-2 px-3 text-right">{row.issued.toFixed(2)} L</td>
+                    <td className="py-2 px-3 text-right">{row.logged.toFixed(2)} L</td>
+                    <td className={`py-2 px-3 text-right ${Math.abs(difference) < 0.01 ? 'text-gray-600' : 'text-amber-700'}`}>{difference.toFixed(2)} L</td>
+                    <td className="py-2 pl-3 text-right">
+                      <span className={`font-medium ${reconciled ? 'text-emerald-700' : 'text-amber-700'}`}>{reconciled ? 'Reconciled' : row.issued === 0 ? 'Log only' : row.logged === 0 ? 'Pending log' : 'Review'}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {showPrimaryLedgerModal && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
@@ -655,7 +967,7 @@ export default function FuelTracking() {
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div>
                 <h2 id="primary-ledger-title" className="text-sm font-semibold text-gray-900">Primary Ledger</h2>
-                <p className="text-xs text-gray-600">Record fuel top-up transactions</p>
+                <p className="text-xs text-gray-600">Add fuel litres to the Judiciary&apos;s monthly allocation</p>
               </div>
               <button
                 onClick={() => setShowPrimaryLedgerModal(false)}
@@ -670,43 +982,114 @@ export default function FuelTracking() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Date of Top Up</label>
-                  <input type="date" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="date"
+                    value={primaryLedgerForm.date_of_top_up}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('date_of_top_up', e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Proof of Payment (POP)</label>
-                  <input type="text" placeholder="POP reference" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="text"
+                    value={primaryLedgerForm.proof_of_payment}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('proof_of_payment', e.target.value)}
+                    placeholder="POP reference"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700">Amount to Top Up</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Fuel Allocation (Litres)</label>
+                  <input
+                    type="number"
+                    value={primaryLedgerForm.amount_to_top_up}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('amount_to_top_up', e.target.value)}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">General Receipt Number</label>
-                  <input type="text" placeholder="Receipt number" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="text"
+                    value={primaryLedgerForm.general_receipt_number}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('general_receipt_number', e.target.value)}
+                    placeholder="Receipt number"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Vehicle Registration Number</label>
-                  <input type="text" placeholder="Registration number" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="text"
+                    value={primaryLedgerForm.vehicle_registration_number}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('vehicle_registration_number', e.target.value)}
+                    placeholder="Registration number"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Fuel Gas Station</label>
-                  <input type="text" placeholder="Station name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="text"
+                    value={primaryLedgerForm.fuel_gas_station}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('fuel_gas_station', e.target.value)}
+                    placeholder="Station name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Balance After Refill</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="number"
+                    value={primaryFormBalance.toFixed(2)}
+                    readOnly
+                    aria-label="Calculated monthly balance after allocation in litres"
+                    className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Balance After Top-Up</label>
+                  <input
+                    type="number"
+                    value={primaryLedgerForm.balance_after_top_up}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('balance_after_top_up', e.target.value)}
+                    placeholder="0"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Driver&apos;s Name</label>
-                  <input type="text" placeholder="Driver name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="text"
+                    value={primaryLedgerForm.driver_name}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('driver_name', e.target.value)}
+                    placeholder="Driver name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Authorising Officer</label>
-                  <input type="text" placeholder="Officer name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input
+                    type="text"
+                    value={primaryLedgerForm.authorising_officer}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('authorising_officer', e.target.value)}
+                    placeholder="Officer name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-xs font-medium text-gray-700">Activity (Description)</label>
-                  <textarea rows={3} placeholder="Describe the top-up activity" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <textarea
+                    rows={3}
+                    value={primaryLedgerForm.activity_description}
+                    onChange={(e) => handlePrimaryLedgerFieldChange('activity_description', e.target.value)}
+                    placeholder="Describe the top-up activity"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
                 </div>
               </div>
 
@@ -718,10 +1101,158 @@ export default function FuelTracking() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    setShowPrimaryLedgerModal(false);
-                    showSuccessAlert('Primary Ledger', 'Fuel top-up entry saved successfully.');
-                  }}
+                  onClick={handlePrimaryLedgerSubmit}
+                  className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                >
+                  Save Entry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showFuelRegisterModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowFuelRegisterModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="fuel-register-title"
+            className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <div>
+                <h2 id="fuel-register-title" className="text-sm font-semibold text-gray-900">Fuel Register</h2>
+                <p className="text-xs text-gray-600">Issue litres from the selected month&apos;s Primary Ledger allocation</p>
+              </div>
+              <button
+                onClick={() => setShowFuelRegisterModal(false)}
+                className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close Fuel Register"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Date of Top Up</label>
+                  <input
+                    type="date"
+                    value={fuelRegisterForm.date_of_top_up}
+                    onChange={(e) => handleFuelRegisterFieldChange('date_of_top_up', e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Proof of Payment (POP)</label>
+                  <input
+                    type="text"
+                    value={fuelRegisterForm.proof_of_payment}
+                    onChange={(e) => handleFuelRegisterFieldChange('proof_of_payment', e.target.value)}
+                    placeholder="POP reference"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Fuel Issued (Litres)</label>
+                  <input
+                    type="number"
+                    value={fuelRegisterForm.amount_to_top_up}
+                    onChange={(e) => handleFuelRegisterFieldChange('amount_to_top_up', e.target.value)}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">General Receipt Number</label>
+                  <input
+                    type="text"
+                    value={fuelRegisterForm.general_receipt_number}
+                    onChange={(e) => handleFuelRegisterFieldChange('general_receipt_number', e.target.value)}
+                    placeholder="Receipt number"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Vehicle Registration Number</label>
+                  <select
+                    value={fuelRegisterForm.vehicle_registration_number}
+                    onChange={(e) => handleFuelRegisterFieldChange('vehicle_registration_number', e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="">Select a vehicle</option>
+                    {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.registration_number}>{vehicle.registration_number}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Fuel Gas Station</label>
+                  <input
+                    type="text"
+                    value={fuelRegisterForm.fuel_gas_station}
+                    onChange={(e) => handleFuelRegisterFieldChange('fuel_gas_station', e.target.value)}
+                    placeholder="Station name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Balance After Refill</label>
+                  <input
+                    type="number"
+                    value={registerFormBalance.toFixed(2)}
+                    readOnly
+                    aria-label="Calculated monthly balance after fuel issue in litres"
+                    className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Driver&apos;s Name</label>
+                  <input
+                    type="text"
+                    value={fuelRegisterForm.driver_name}
+                    onChange={(e) => handleFuelRegisterFieldChange('driver_name', e.target.value)}
+                    placeholder="Driver name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Authorising Officer</label>
+                  <input
+                    type="text"
+                    value={fuelRegisterForm.authorising_officer}
+                    onChange={(e) => handleFuelRegisterFieldChange('authorising_officer', e.target.value)}
+                    placeholder="Officer name"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Activity (Description)</label>
+                  <textarea
+                    rows={3}
+                    value={fuelRegisterForm.activity_description}
+                    onChange={(e) => handleFuelRegisterFieldChange('activity_description', e.target.value)}
+                    placeholder="Describe the top-up activity"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
+                <button
+                  onClick={() => setShowFuelRegisterModal(false)}
+                  className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleFuelRegisterSubmit}
                   className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
                 >
                   Save Entry
@@ -762,51 +1293,58 @@ export default function FuelTracking() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Date</label>
-                  <input type="date" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="date" value={vehicleLogBookForm.date} onChange={(event) => handleVehicleLogBookFieldChange('date', event.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Time</label>
-                  <input type="time" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="time" value={vehicleLogBookForm.time} onChange={(event) => handleVehicleLogBookFieldChange('time', event.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Vehicle Registration Number</label>
+                  <select value={vehicleLogBookForm.vehicle_registration_number} onChange={(event) => handleVehicleLogBookFieldChange('vehicle_registration_number', event.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500">
+                    <option value="">Select a vehicle</option>
+                    {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.registration_number}>{vehicle.registration_number}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Authorising Officer</label>
-                  <input type="text" placeholder="Officer name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="text" value={vehicleLogBookForm.authorising_officer} onChange={(event) => handleVehicleLogBookFieldChange('authorising_officer', event.target.value)} placeholder="Officer name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Mileage Start Up</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="number" min="0" value={vehicleLogBookForm.mileage_start_up} onChange={(event) => handleVehicleLogBookFieldChange('mileage_start_up', event.target.value)} placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Finishing Mileage</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="number" min="0" value={vehicleLogBookForm.finishing_mileage} onChange={(event) => handleVehicleLogBookFieldChange('finishing_mileage', event.target.value)} placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Distance Covered</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="number" value={vehicleLogBookForm.distance_covered} readOnly className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600 outline-none" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Type of Fuel</label>
-                  <input type="text" placeholder="Fuel type" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="text" value={vehicleLogBookForm.fuel_type} onChange={(event) => handleVehicleLogBookFieldChange('fuel_type', event.target.value)} placeholder="Fuel type" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">How Many Litres</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="number" min="0" step="0.01" value={vehicleLogBookForm.how_many_litres} onChange={(event) => handleVehicleLogBookFieldChange('how_many_litres', event.target.value)} placeholder="0.00" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-700">Refulants (Litres)</label>
-                  <input type="number" placeholder="0" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <label className="mb-1 block text-xs font-medium text-gray-700">Fuel Remaining After Journey (Litres)</label>
+                  <input type="number" min="0" step="0.01" value={vehicleLogBookForm.remaining_fuel_litres} onChange={(event) => handleVehicleLogBookFieldChange('remaining_fuel_litres', event.target.value)} placeholder="0.00" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Driver Name</label>
-                  <input type="text" placeholder="Driver name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="text" value={vehicleLogBookForm.driver_name} onChange={(event) => handleVehicleLogBookFieldChange('driver_name', event.target.value)} placeholder="Driver name" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div className="md:col-span-2">
                   <label className="mb-1 block text-xs font-medium text-gray-700">Details of the Journey (Description)</label>
-                  <textarea rows={3} placeholder="Describe the journey" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <textarea rows={3} value={vehicleLogBookForm.journey_description} onChange={(event) => handleVehicleLogBookFieldChange('journey_description', event.target.value)} placeholder="Describe the journey" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-gray-700">Time for Completing the Journey</label>
-                  <input type="time" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
+                  <input type="time" value={vehicleLogBookForm.journey_end_time} onChange={(event) => handleVehicleLogBookFieldChange('journey_end_time', event.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500" />
                 </div>
               </div>
 
@@ -818,10 +1356,7 @@ export default function FuelTracking() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    setShowVehicleLogBookModal(false);
-                    showSuccessAlert('Vehicle Log Book', 'Journey log entry saved successfully.');
-                  }}
+                  onClick={handleVehicleLogBookSubmit}
                   className="rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
                 >
                   Save Entry

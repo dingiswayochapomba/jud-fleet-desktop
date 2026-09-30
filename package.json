@@ -17,6 +17,7 @@
     "seed:firebase": "node migrations/seed-firebase.mjs",
     "seed:firebase:drivers": "node migrations/seed-firebase-drivers.mjs",
     "seed:firebase:vehicles": "node migrations/seed-firebase-vehicles.mjs",
+    "migrate:fuel-register": "node migrations/migrate-fuel-register.mjs",
     "deploy:firestore-rules": "node scripts/deploy-firestore-rules.mjs",
     "deploy:firestore-indexes": "node scripts/deploy-firestore-indexes.mjs"
   },
